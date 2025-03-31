@@ -1,0 +1,226 @@
+name: Build Debian Kernel
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # Runs daily at 00:00 UTC
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: "Force rebuild"
+        required: false
+        default: false
+        type: boolean
+      kernel_version:
+        description: "Kernel version"
+        required: true
+        default: "6.12"
+        type: choice
+        options:
+          - "6.12"
+
+jobs:
+  check:
+    name: Check Kernel Version
+    runs-on: ubuntu-latest
+    outputs:
+      kernel_version: ${{ steps.kernel_version.outputs.KERNEL_VERSION }}
+      skip_build: ${{ steps.check_tag.outputs.skip_build }}
+    steps:
+      - name: Get Specified Kernel Version
+        id: kernel_version
+        run: |
+          kernel_version=$(curl -s https://www.kernel.org | grep -A 1 -m 1 "${{ inputs.kernel_version }}" | grep -oP '\d+\.\d+\.\d+')
+          if [ -z "$kernel_version" ]; then
+            echo "❌ Failed to get kernel version: ${{ inputs.kernel_version }}, please check the kernel version is correct."
+            exit 1
+          fi
+          echo "✅ Kernel version: $kernel_version"
+          echo "KERNEL_VERSION=$kernel_version" >> $GITHUB_OUTPUT
+      - name: Checkout Workflow Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          TAG_EXISTS=$(git tag --list | grep -w "${{ steps.kernel_version.outputs.KERNEL_VERSION }}" || echo "")
+          if [ -n "$TAG_EXISTS" ] && [ "${{ github.event.inputs.force_rebuild }}" != "true" ]; then
+            echo "Tag ${KERNEL_VERSION} exists. Skipping build."
+            echo "skip_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "Proceeding with build."
+            echo "skip_build=false" >> $GITHUB_OUTPUT
+          fi
+    
+
+  build:
+    name: Build Debian Kernel Package
+    runs-on: ubuntu-latest
+    needs: check
+    if: needs.check.outputs.skip_build != 'true' || github.event.inputs.force_rebuild == 'true'
+    strategy:
+      matrix:
+        arch: [x86_64, arm64]
+    outputs:
+      kernel_version: ${{ needs.check.outputs.kernel_version }}
+      build_time: ${{ steps.get_build_time.outputs.BUILD_TIMESTAMP }}
+    steps:
+      - name: Update and install dependencies
+        run: |
+          apt-get update
+          apt-get install -y build-essential devscripts git patch jq fakeroot sbsigntool openssl quilt \
+            python3 python3-debian python3-dacite python3-jinja2 debhelper dh-python python3-docutils python3-sphinx \
+            libncurses-dev libssl-dev libelf-dev bison bc flex rsync initramfs-tools kernel-wedge kmod lz4 pahole zstd
+      - name: Install Cross Build Essential
+        if: matrix.arch == 'arm64'
+        run: apt-get install -y crossbuild-essential-arm64
+      - name: Checkout Workflow Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+      - name: Download Linux Kernel Source
+        run: |
+          echo "⌛ Downloading Linux Kernel Source Code for ${{ needs.check.outputs.kernel_version }}..."
+          wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${{ needs.check.outputs.kernel_version }}.tar.xz
+          tar -xf linux-${{ needs.check.outputs.kernel_version }}.tar.xz
+          rm linux-${{ needs.check.outputs.kernel_version }}.tar.xz
+          mv linux-${{ needs.check.outputs.kernel_version }} linux
+          echo "✅ Downloaded Linux Kernel Source Code for ${{ needs.check.outputs.kernel_version }}"
+      - name: Download Debian Kernel Additional Source
+        run: |
+          echo "⌛ Downloading Debian Kernel Additional Source..."
+          git clone -b debian/${{ needs.check.outputs.kernel_version }}-1 --depth=1 https://salsa.debian.org/kernel-team/linux.git linux-debian
+          echo "✅ Downloaded Debian Kernel Additional Source"
+      - name: Download Xanmod Patches
+        run: |
+          echo "⌛ Downloading Xanmod Patches..."
+          git clone --depth=1 https://gitlab.com/xanmod/linux-patches.git linux-xanmod-patches
+          echo "✅ Downloaded Xanmod Patches"
+      - name: Checkout ECHO-CPU-Scheduler
+        uses: actions/checkout@v4
+        with:
+          repository: hamadmarri/ECHO-CPU-Scheduler
+          path: echo-patches
+      - name: Organize Patches
+        run: |
+          echo "⌛ Organizing Patches..."
+          cd linux
+          cp -R ../linux-debian/debian/patches ./patches
+          echo "⭕ Copied Debian Patches"
+          cp -R ../linux-xanmod-patches/linux-${{ inputs.kernel_version }}.y-xanmod/net ./patches/net
+          echo "⭕ Copied Xanmod Net Patches"
+          cp -R ../echo-patches/${{ inputs.kernel_version }}.y ./patches/cpu-scheduler
+          echo "⭕ Copied ECHO-CPU-Scheduler Patches"
+          cd patches
+          echo "# Net Patches from Xanmod" >> series
+          find ./net -type f -name "*.patch" -printf "net/%P\n" | sort >> series
+          echo "# CPU Scheduler Patches from ECHO-CPU-Scheduler" >> series
+          find ./cpu-scheduler -type f -name "*.patch" -printf "cpu-scheduler/%P\n" | sort >> series
+          echo "✅ All Patches Organized"
+      - name: Apply Patches
+        run: |
+          echo "⌛ Applying Patches..."
+          cd linux
+          quilt push -a --fuzz=0
+          echo "✅ All Patches Applied"
+      - name: Setup sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          version: "v0.10.0"
+      - name: Configure Kernel Build
+        run: |
+          echo "⌛ Configuring Kernel Build..."
+          cd linux
+          if [ "${{ matrix.arch }}" == "arm64" ]; then
+            make CC="sccache gcc" HOSTCC="sccache gcc" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
+          else
+            make CC="sccache gcc" HOSTCC="sccache gcc" defconfig
+          fi
+          echo "⭕ Default Kernel Build Generated for ${{ matrix.arch }}"
+          ./scripts/config --disable CONFIG_FAIR_GROUP_SCHED
+          ./scripts/config --disable CONFIG_SCHED_AUTOGROUP
+          ./scripts/config --disable CONFIG_SCHED_CORE
+          echo "⭕ Applied settings from ECHO-CPU-Scheduler"
+          echo "✅ Kernel Build Configured for ${{ matrix.arch }}"
+      - name: Build Kernel (Debian Package)
+        env:
+          SCCACHE_GHA_ENABLED: "true" 
+        run: |
+          echo "⌛ Start Building Kernel (Debian Package) for ${{ matrix.arch }}..."
+          cd linux
+          if [ "${{ matrix.arch }}" == "arm64" ]; then
+            make CC="sccache gcc" HOSTCC="sccache gcc" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
+          else
+            make CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg -j$(nproc)
+          fi
+          echo "✅ Kernel (Debian Package) Built Successfully"
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ matrix.arch }}
+          path: |
+            *.deb
+            *.changes
+            *.buildinfo
+      - name: Get build time
+        id: get_build_time
+        run: |
+          BUILD_TIMESTAMP=$(date -Is)
+          echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "BUILD_TIME=$BUILD_TIMESTAMP"
+          echo "🏷️ Build Time: $BUILD_TIMESTAMP"
+  create-release:
+    name: Create Release
+    needs: [check, build]
+    if: needs.check.outputs.skip_build != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifacts for x86_64
+        uses: actions/download-artifact@v4
+        with:
+          name: kernel-x86_64
+          path: ./
+      - name: Download Artifacts for arm64
+        uses: actions/download-artifact@v4
+        with:
+          name: kernel-arm64
+          path: ./
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.check.outputs.kernel_version }}
+          name: Debian Cloud Kernel ${{ needs.check.outputs.kernel_version }} with BBR3
+          body: |
+            🚀 **Kernel Version:** `${{ needs.check.outputs.kernel_version }}`
+
+            📅 **Build Time:** `${{ needs.build.outputs.build_time }}`
+
+            🛠️ **Build Information:**
+            - **Architecture:** `amd64`, `arm64`
+            - **Kernel Type:** `common`
+            - **Applied Patches:**
+              - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
+              - `BBR V3` (from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
+              - `ECHO-CPU-Scheduler` (from [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
+            
+            --------
+            
+            🚀 **内核版本:** `${{ needs.check.outputs.kernel_version }}`
+
+            📅 **构建时间:** `${{ needs.build.outputs.build_time }}`
+
+            🛠️ **构建信息:**
+            - **架构:** `amd64`, `arm64`
+            - **内核类型:** `common`
+            - **应用补丁:**
+              - `Debian 补丁集合` (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
+              - `BBR V3` (来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
+              - `ECHO-CPU-Scheduler` (来自 [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
+          files: |
+            *.deb
+            *.changes
+            *.buildinfo
+        
+
