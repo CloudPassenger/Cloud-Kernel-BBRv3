@@ -18,6 +18,10 @@ on:
         options:
           - "6.12"
 
+env:
+  SCCACHE_CACHE_SIZE: 5G
+  SCCACHE_DIR: /home/runner/.cache/sccache
+
 jobs:
   check:
     name: Check Kernel Version
@@ -174,6 +178,13 @@ jobs:
           ./scripts/config --disable CONFIG_SCHED_CORE
           echo "⭕ Applied settings from ECHO-CPU-Scheduler"
           echo "✅ Kernel Build Configured for ${{ matrix.arch }}"
+      - name: Setup Github Actions Cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-${{ matrix.arch }}-${{ needs.check.outputs.kernel_version }}-${{ hashFiles('linux/.config') }}
+          restore-keys: |
+            sccache-${{ matrix.arch }}-${{ needs.check.outputs.kernel_version }}-
       - name: Build Kernel (Debian Package)
         env:
           SCCACHE_GHA_ENABLED: "true" 
