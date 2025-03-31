@@ -124,11 +124,14 @@ jobs:
           echo "⭕ Copied Xanmod Net Patches"
           cp -R ../echo-patches/${{ inputs.kernel_version }}.y ./patches/cpu-scheduler
           echo "⭕ Copied ECHO-CPU-Scheduler Patches"
+          cp -R ../patches ./patches/custom
           cd patches
           echo "# Net Patches from Xanmod" >> series
           find ./net -type f -name "*.patch" -printf "net/%P\n" | sort >> series
           echo "# CPU Scheduler Patches from ECHO-CPU-Scheduler" >> series
           find ./cpu-scheduler -type f -name "*.patch" -printf "cpu-scheduler/%P\n" | sort >> series
+          echo "# Custom Patches" >> series
+          find ./custom -type f -name "*.patch" -printf "custom/%P\n" | sort >> series
           echo "✅ All Patches Organized"
       - name: Apply Patches
         run: |
@@ -149,7 +152,23 @@ jobs:
           else
             make CC="sccache gcc" HOSTCC="sccache gcc" defconfig
           fi
-          echo "⭕ Default Kernel Build Generated for ${{ matrix.arch }}"
+          echo "⭕ Default Kernel Build Configuration Generated for ${{ matrix.arch }}"
+          if [ "${{ matrix.arch }}" == "arm64" ]; then
+            ./scripts/kconfig/merge_config.sh -r .config \
+              ../linux-debian/debian/config/config \
+              ../linux-debian/debian/config/arm64/config \
+              ../linux-debian/debian/config/config.cloud \
+              ../linux-debian/debian/config/arm64/config.cloud-arm64 \
+              ../configs/arm64.config
+          else
+            ./scripts/kconfig/merge_config.sh -r .config \
+              ../linux-debian/debian/config/config \
+              ../linux-debian/debian/config/amd64/config \
+              ../linux-debian/debian/config/config.cloud \
+              ../linux-debian/debian/config/amd64/config.cloud-amd64 \
+              ../configs/x86_64.config
+          fi
+          echo "⭕ Merged Configurations from Debian"
           ./scripts/config --disable CONFIG_FAIR_GROUP_SCHED
           ./scripts/config --disable CONFIG_SCHED_AUTOGROUP
           ./scripts/config --disable CONFIG_SCHED_CORE
@@ -162,9 +181,9 @@ jobs:
           echo "⌛ Start Building Kernel (Debian Package) for ${{ matrix.arch }}..."
           cd linux
           if [ "${{ matrix.arch }}" == "arm64" ]; then
-            make CC="sccache aarch64-linux-gnu-gcc" HOSTCC="sccache gcc" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
+            make CC="sccache aarch64-linux-gnu-gcc" HOSTCC="sccache gcc" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION="-cloud" bindeb-pkg -j$(nproc)
           else
-            make CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg -j$(nproc)
+            make CC="sccache gcc" HOSTCC="sccache gcc" LOCALVERSION="-cloud" bindeb-pkg -j$(nproc)
           fi
           echo "✅ Kernel (Debian Package) Built Successfully"
       - name: Upload Artifacts
@@ -212,7 +231,7 @@ jobs:
 
             🛠️ **Build Information:**
             - **Architecture:** `amd64`, `arm64`
-            - **Kernel Type:** `common`
+            - **Kernel Type:** `cloud`
             - **Applied Patches:**
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
@@ -226,7 +245,7 @@ jobs:
 
             🛠️ **构建信息:**
             - **架构:** `amd64`, `arm64`
-            - **内核类型:** `common`
+            - **内核类型:** `cloud`
             - **应用补丁:**
               - `Debian 补丁集合` (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
