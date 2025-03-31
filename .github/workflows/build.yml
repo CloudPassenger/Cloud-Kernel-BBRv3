@@ -158,14 +158,14 @@ jobs:
           fi
           echo "⭕ Default Kernel Build Configuration Generated for ${{ matrix.arch }}"
           if [ "${{ matrix.arch }}" == "arm64" ]; then
-            ./scripts/kconfig/merge_config.sh -r .config \
+            ./scripts/kconfig/merge_config.sh -r \
               ../linux-debian/debian/config/config \
               ../linux-debian/debian/config/arm64/config \
               ../linux-debian/debian/config/config.cloud \
               ../linux-debian/debian/config/arm64/config.cloud-arm64 \
               ../configs/arm64.config
           else
-            ./scripts/kconfig/merge_config.sh -r .config \
+            ./scripts/kconfig/merge_config.sh -r \
               ../linux-debian/debian/config/config \
               ../linux-debian/debian/config/amd64/config \
               ../linux-debian/debian/config/config.cloud \
@@ -192,9 +192,9 @@ jobs:
           echo "⌛ Start Building Kernel (Debian Package) for ${{ matrix.arch }}..."
           cd linux
           if [ "${{ matrix.arch }}" == "arm64" ]; then
-            make CC="sccache aarch64-linux-gnu-gcc" HOSTCC="sccache gcc" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION="-cloud" bindeb-pkg -j$(nproc)
+            make CC="sccache aarch64-linux-gnu-gcc" HOSTCC="sccache gcc" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
           else
-            make CC="sccache gcc" HOSTCC="sccache gcc" LOCALVERSION="-cloud" bindeb-pkg -j$(nproc)
+            make CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg -j$(nproc)
           fi
           echo "✅ Kernel (Debian Package) Built Successfully"
       - name: Upload Artifacts
