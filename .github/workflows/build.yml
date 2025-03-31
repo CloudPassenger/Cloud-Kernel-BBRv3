@@ -158,14 +158,14 @@ jobs:
           fi
           echo "⭕ Default Kernel Build Configuration Generated for ${{ matrix.arch }}"
           if [ "${{ matrix.arch }}" == "arm64" ]; then
-            ./scripts/kconfig/merge_config.sh -r \
+            ./scripts/kconfig/merge_config.sh -m -r .config \
               ../linux-debian/debian/config/config \
               ../linux-debian/debian/config/arm64/config \
               ../linux-debian/debian/config/config.cloud \
               ../linux-debian/debian/config/arm64/config.cloud-arm64 \
               ../configs/arm64.config
           else
-            ./scripts/kconfig/merge_config.sh -r \
+            ./scripts/kconfig/merge_config.sh -m -r .config \
               ../linux-debian/debian/config/config \
               ../linux-debian/debian/config/amd64/config \
               ../linux-debian/debian/config/config.cloud \
