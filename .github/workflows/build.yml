@@ -183,9 +183,9 @@ jobs:
           echo "⌛ Start Building Kernel (Debian Package) for ${{ matrix.arch }}..."
           cd linux
           if [ "${{ matrix.arch }}" == "arm64" ]; then
-            make -j$(nproc) CC="sccache aarch64-linux-gnu-gcc" HOSTCC="sccache gcc" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg
+            make -j $(nproc) CC="sccache aarch64-linux-gnu-gcc" HOSTCC="sccache gcc" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg
           else
-            make -j$(nproc) CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg
+            make -j $(nproc) CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg
           fi
           echo "✅ Kernel (Debian Package) Built Successfully"
       - name: Upload Artifacts
