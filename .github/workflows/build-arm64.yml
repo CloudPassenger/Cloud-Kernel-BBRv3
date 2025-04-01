@@ -1,4 +1,4 @@
-name: Build Debian Kernel (x86_64)
+name: Build Debian Kernel (arm64)
 
 on:
   schedule:
@@ -52,9 +52,9 @@ jobs:
       - name: Check if tag exists
         id: check_tag
         run: |
-          TAG_EXISTS=$(git tag --list | grep -x "${{ steps.kernel_version.outputs.KERNEL_VERSION }}" || echo "")
+          TAG_EXISTS=$(git tag --list | grep -x "${{ steps.kernel_version.outputs.KERNEL_VERSION }}-arm64" || echo "")
           if [ -n "$TAG_EXISTS" ] && [ "${{ github.event.inputs.force_rebuild }}" != "true" ]; then
-            echo "Tag ${KERNEL_VERSION} exists. Skipping build."
+            echo "Tag ${KERNEL_VERSION}-arm64 exists. Skipping build."
             echo "skip_build=true" >> $GITHUB_OUTPUT
           else
             echo "Proceeding with build."
@@ -62,8 +62,8 @@ jobs:
           fi
 
   build:
-    name: Build Debian Kernel Package for x86_64
-    runs-on: ubuntu-24.04
+    name: Build Debian Kernel Package for arm64
+    runs-on: ubuntu-24.04-arm
     needs: check
     if: needs.check.outputs.skip_build != 'true' || github.event.inputs.force_rebuild == 'true'
     outputs:
@@ -137,32 +137,32 @@ jobs:
         run: |
           echo "⌛ Configuring Kernel Build..."
           cd linux
-          cp ../configs/x86_64.config .config
-          echo "⭕ Copied Pre-Configured .config from x86_64"
+          cp ../configs/arm64.config .config
+          echo "⭕ Copied Pre-Configured .config from arm64"
           make CC="sccache gcc" HOSTCC="sccache gcc" olddefconfig
-          echo "✅ Final Kernel Build Configured for x86_64"
+          echo "✅ Final Kernel Build Configured for arm64"
       - name: Setup Github Actions Cache
         uses: actions/cache@v4
         with:
           path: ${{ env.SCCACHE_DIR }}
           lookup-only: ${{ inputs.skip_cache }}
-          key: sccache-x86_64-${{ needs.check.outputs.kernel_version }}-${{ hashFiles('linux/.config') }}
+          key: sccache-arm64-${{ needs.check.outputs.kernel_version }}-${{ hashFiles('linux/.config') }}
           restore-keys: |
-            sccache-x86_64-${{ needs.check.outputs.kernel_version }}-
+            sccache-arm64-${{ needs.check.outputs.kernel_version }}-
       - name: Build Kernel (Debian Package)
         env:
           SCCACHE_GHA_ENABLED: "true" 
         run: |
-          echo "⌛ Start Building Kernel (Debian Package) for x86_64..."
+          echo "⌛ Start Building Kernel (Debian Package) for arm64..."
           cd linux
           make -j $(nproc) CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg
           echo "✅ Kernel (Debian Package) Built Successfully"
-          cp .config ../linux-${{ needs.check.outputs.kernel_version }}-amd64.config
+          cp .config ../linux-${{ needs.check.outputs.kernel_version }}-arm64.config
           echo "✅ Copied Kernel Config"
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-x86_64
+          name: kernel-arm64
           path: |
             *.deb
             *.changes
@@ -182,10 +182,10 @@ jobs:
     if: needs.check.outputs.skip_build != 'true'
     runs-on: ubuntu-24.04
     steps:
-      - name: Download Artifacts for x86_64
+      - name: Download Artifacts for arm64
         uses: actions/download-artifact@v4
         with:
-          name: kernel-x86_64
+          name: kernel-arm64
           path: ./
       - name: Remove Debug Package in Release
         run: |
@@ -195,15 +195,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.check.outputs.kernel_version }}
-          name: Debian Cloud Kernel ${{ needs.check.outputs.kernel_version }} with BBR3 (amd64)
+          tag_name: ${{ needs.check.outputs.kernel_version }}-arm64
+          name: Debian Cloud Kernel ${{ needs.check.outputs.kernel_version }} with BBR3 (arm64)
           body: |
             🚀 **Kernel Version:** `${{ needs.check.outputs.kernel_version }}`
 
             📅 **Build Time:** `${{ needs.build.outputs.build_time }}`
 
             🛠️ **Build Information:**
-            - **Architecture:** `amd64`
+            - **Architecture:** `arm64`
             - **Kernel Type:** `cloud`
             - **Applied Patches:**
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
@@ -217,7 +217,7 @@ jobs:
             📅 **构建时间:** `${{ needs.build.outputs.build_time }}`
 
             🛠️ **构建信息:**
-            - **架构:** `amd64`
+            - **架构:** `arm64`
             - **内核类型:** `cloud`
             - **应用补丁:**
               - `Debian 补丁集合` (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
