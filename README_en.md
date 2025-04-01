@@ -4,7 +4,10 @@ English | [简体中文](README_zh.md)
 
 | Debian Custom Kernel with BBR3 and ECHO Scheduler
 
-[![CI](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/main.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions)
+Current Kernel Version: 6.12 (Mainline)
+
+[![CI for x86_64](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions)
+[![CI for arm64](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build-arm64.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions)
 
 ## 📦 Project Overview
 

@@ -4,7 +4,10 @@
 
 | 集成 BBR3 和 ECHO 调度器的 Debian 定制内核
 
-[![CI](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/main.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions)
+当前内核版本: 6.12 (Mainline)
+
+[![CI for x86_64](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions)
+[![CI for arm64](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build-arm64.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions)
 
 ## 📦 项目概述
 
