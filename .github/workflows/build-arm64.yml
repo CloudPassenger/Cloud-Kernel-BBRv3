@@ -99,11 +99,11 @@ jobs:
           echo "⌛ Downloading Xanmod Patches..."
           git clone --depth=1 https://gitlab.com/xanmod/linux-patches.git linux-xanmod-patches
           echo "✅ Downloaded Xanmod Patches"
-      - name: Checkout ECHO-CPU-Scheduler
+      - name: Checkout Bore-Scheduler Patches
         uses: actions/checkout@v4
         with:
-          repository: hamadmarri/ECHO-CPU-Scheduler
-          path: echo-patches
+          repository: firelzrd/bore-scheduler
+          path: bore-patches
       - name: Organize Patches
         run: |
           echo "⌛ Organizing Patches..."
@@ -112,8 +112,8 @@ jobs:
           echo "⭕ Copied Debian Patches"
           cp -R ../linux-xanmod-patches/linux-${{ inputs.kernel_version }}.y-xanmod/net ./patches/net
           echo "⭕ Copied Xanmod Net Patches"
-          cp -R ../echo-patches/${{ inputs.kernel_version }}.y ./patches/cpu-scheduler
-          echo "⭕ Copied ECHO-CPU-Scheduler Patches"
+          cp -R ../bore-patches/patches/stable/linux-${{ inputs.kernel_version }}-bore ./patches/cpu-scheduler
+          echo "⭕ Copied Bore-Scheduler Patches"
           cp -R ../patches ./patches/custom
           cd patches
           echo "# Net Patches from Xanmod" >> series
