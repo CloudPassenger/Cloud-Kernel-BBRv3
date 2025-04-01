@@ -52,7 +52,7 @@ jobs:
       - name: Check if tag exists
         id: check_tag
         run: |
-          TAG_EXISTS=$(git tag --list | grep -w "${{ steps.kernel_version.outputs.KERNEL_VERSION }}" || echo "")
+          TAG_EXISTS=$(git tag --list | grep -x "${{ steps.kernel_version.outputs.KERNEL_VERSION }}" || echo "")
           if [ -n "$TAG_EXISTS" ] && [ "${{ github.event.inputs.force_rebuild }}" != "true" ]; then
             echo "Tag ${KERNEL_VERSION} exists. Skipping build."
             echo "skip_build=true" >> $GITHUB_OUTPUT
@@ -60,16 +60,12 @@ jobs:
             echo "Proceeding with build."
             echo "skip_build=false" >> $GITHUB_OUTPUT
           fi
-    
 
   build:
-    name: Build Debian Kernel Package
+    name: Build Debian Kernel Package for x86_64
     runs-on: ubuntu-24.04
     needs: check
     if: needs.check.outputs.skip_build != 'true' || github.event.inputs.force_rebuild == 'true'
-    strategy:
-      matrix:
-        arch: [x86_64]
     outputs:
       kernel_version: ${{ needs.check.outputs.kernel_version }}
       build_time: ${{ steps.get_build_time.outputs.BUILD_TIMESTAMP }}
@@ -80,21 +76,6 @@ jobs:
           sudo apt-get install -y build-essential curl git patch jq openssl quilt \
             libncurses-dev libssl-dev libelf-dev libudev-dev libpci-dev libcap-dev libpcre2-dev libcurl4-openssl-dev \
             bison bc flex rsync debhelper lz4 pahole zstd dpkg-dev fakeroot kmod cpio xz-utils
-      - name: Alternative apt-repos (Ubuntu 24.04) for arm64
-        if: matrix.arch == 'arm64'
-        run: |
-          sudo cp /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ports.sources
-          sudo sed -i.bak -e 's/^\(Suites:.*\)$/\1\nArchitectures: amd64 i386/' /etc/apt/sources.list.d/ubuntu.sources
-          sudo sed -i.bak -e 's/^URIs:.*$/URIs: http:\/\/ports.ubuntu.com\/ubuntu-ports\//' /etc/apt/sources.list.d/ports.sources
-          sudo sed -i -e 's/^\(Suites:.*\)$/\1\nArchitectures: armhf arm64/' /etc/apt/sources.list.d/ports.sources
-          cat /etc/apt/sources.list.d/ports.sources
-      - name: Install Cross Build Essential
-        if: matrix.arch == 'arm64'
-        run: |
-          sudo dpkg --add-architecture armhf
-          sudo dpkg --add-architecture arm64
-          sudo apt-get update
-          sudo apt-get install -y crossbuild-essential-arm64 libssl-dev:armhf libssl-dev:arm64
 
       - name: Checkout Workflow Source Code
         uses: actions/checkout@v4
@@ -156,44 +137,32 @@ jobs:
         run: |
           echo "⌛ Configuring Kernel Build..."
           cd linux
-          if [ "${{ matrix.arch }}" == "arm64" ]; then
-            cp ../configs/arm64.config .config
-          else
-            cp ../configs/x86_64.config .config
-          fi
-          echo "⭕ Copied Pre-Configured .config from ${{ matrix.arch }}"
-          if [ "${{ matrix.arch }}" == "arm64" ]; then
-            make CC="sccache aarch64-linux-gnu-gcc" HOSTCC="sccache gcc" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
-          else
-            make CC="sccache gcc" HOSTCC="sccache gcc" olddefconfig
-          fi
-          echo "✅ Final Kernel Build Configured for ${{ matrix.arch }}"
+          cp ../configs/x86_64.config .config
+          echo "⭕ Copied Pre-Configured .config from x86_64"
+          make CC="sccache gcc" HOSTCC="sccache gcc" olddefconfig
+          echo "✅ Final Kernel Build Configured for x86_64"
       - name: Setup Github Actions Cache
         uses: actions/cache@v4
         with:
           path: ${{ env.SCCACHE_DIR }}
           lookup-only: ${{ inputs.skip_cache }}
-          key: sccache-${{ matrix.arch }}-${{ needs.check.outputs.kernel_version }}-${{ hashFiles('linux/.config') }}
+          key: sccache-x86_64-${{ needs.check.outputs.kernel_version }}-${{ hashFiles('linux/.config') }}
           restore-keys: |
-            sccache-${{ matrix.arch }}-${{ needs.check.outputs.kernel_version }}-
+            sccache-x86_64-${{ needs.check.outputs.kernel_version }}-
       - name: Build Kernel (Debian Package)
         env:
           SCCACHE_GHA_ENABLED: "true" 
         run: |
-          echo "⌛ Start Building Kernel (Debian Package) for ${{ matrix.arch }}..."
+          echo "⌛ Start Building Kernel (Debian Package) for x86_64..."
           cd linux
-          if [ "${{ matrix.arch }}" == "arm64" ]; then
-            make -j $(nproc) CC="sccache aarch64-linux-gnu-gcc" HOSTCC="sccache gcc" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg
-          else
-            make -j $(nproc) CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg
-          fi
+          make -j $(nproc) CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg
           echo "✅ Kernel (Debian Package) Built Successfully"
-          cp .config ../linux-${{ needs.check.outputs.kernel_version }}-${{ matrix.arch }}.config
+          cp .config ../linux-${{ needs.check.outputs.kernel_version }}-amd64.config
           echo "✅ Copied Kernel Config"
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-${{ matrix.arch }}
+          name: kernel-x86_64
           path: |
             *.deb
             *.changes
@@ -206,6 +175,7 @@ jobs:
           echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" >> $GITHUB_OUTPUT
           echo "BUILD_TIME=$BUILD_TIMESTAMP"
           echo "🏷️ Build Time: $BUILD_TIMESTAMP"
+  
   create-release:
     name: Create Release
     needs: [check, build]
@@ -217,25 +187,23 @@ jobs:
         with:
           name: kernel-x86_64
           path: ./
-      - name: Download Artifacts for arm64
-        uses: actions/download-artifact@v4
-        with:
-          name: kernel-arm64
-          path: ./
+      - name: Remove Debug Package in Release
+        run: |
+          rm -f linux-image-*-dbg_*.deb
       - name: Create Release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ needs.check.outputs.kernel_version }}
-          name: Debian Cloud Kernel ${{ needs.check.outputs.kernel_version }} with BBR3
+          name: Debian Cloud Kernel ${{ needs.check.outputs.kernel_version }} with BBR3 (amd64)
           body: |
             🚀 **Kernel Version:** `${{ needs.check.outputs.kernel_version }}`
 
             📅 **Build Time:** `${{ needs.build.outputs.build_time }}`
 
             🛠️ **Build Information:**
-            - **Architecture:** `amd64`, `arm64`
+            - **Architecture:** `amd64`
             - **Kernel Type:** `cloud`
             - **Applied Patches:**
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
@@ -249,7 +217,7 @@ jobs:
             📅 **构建时间:** `${{ needs.build.outputs.build_time }}`
 
             🛠️ **构建信息:**
-            - **架构:** `amd64`, `arm64`
+            - **架构:** `amd64`
             - **内核类型:** `cloud`
             - **应用补丁:**
               - `Debian 补丁集合` (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
@@ -259,5 +227,6 @@ jobs:
             *.deb
             *.changes
             *.buildinfo
+            *.config
         
 
