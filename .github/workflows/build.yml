@@ -5,11 +5,6 @@ on:
     - cron: "0 0 * * *" # Runs daily at 00:00 UTC
   workflow_dispatch:
     inputs:
-      force_rebuild:
-        description: "Force rebuild"
-        required: false
-        default: false
-        type: boolean
       kernel_version:
         description: "Kernel version"
         required: true
@@ -17,6 +12,16 @@ on:
         type: choice
         options:
           - "6.12"
+      force_rebuild:
+        description: "Force rebuild"
+        required: false
+        default: false
+        type: boolean
+      skip_cache:
+        description: "Skip build cache"
+        required: false
+        default: false
+        type: boolean
 
 env:
   SCCACHE_CACHE_SIZE: 5G
@@ -167,6 +172,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.SCCACHE_DIR }}
+          lookup-only: ${{ inputs.skip_cache }}
           key: sccache-${{ matrix.arch }}-${{ needs.check.outputs.kernel_version }}-${{ hashFiles('linux/.config') }}
           restore-keys: |
             sccache-${{ matrix.arch }}-${{ needs.check.outputs.kernel_version }}-
