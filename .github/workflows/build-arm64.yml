@@ -23,10 +23,6 @@ on:
         default: false
         type: boolean
 
-env:
-  SCCACHE_CACHE_SIZE: 5G
-  SCCACHE_DIR: /home/runner/.cache/sccache
-
 jobs:
   check:
     name: Check Kernel Version
@@ -129,33 +125,24 @@ jobs:
           cd linux
           quilt push -a --fuzz=0
           echo "✅ All Patches Applied"
-      - name: Setup sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Setup CCache
+        uses: hendrikmuhs/ccache-action@v1
         with:
-          version: "v0.10.0"
+          key: 'build-${{ inputs.kernel_version }}-arm64'
       - name: Configure Kernel Build
         run: |
           echo "⌛ Configuring Kernel Build..."
           cd linux
           cp ../configs/arm64.config .config
           echo "⭕ Copied Pre-Configured .config from arm64"
-          make CC="sccache gcc" HOSTCC="sccache gcc" olddefconfig
+          make olddefconfig
           echo "✅ Final Kernel Build Configured for arm64"
-      - name: Setup Github Actions Cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          lookup-only: ${{ inputs.skip_cache }}
-          key: sccache-arm64-${{ needs.check.outputs.kernel_version }}-${{ hashFiles('linux/.config') }}
-          restore-keys: |
-            sccache-arm64-${{ needs.check.outputs.kernel_version }}-
       - name: Build Kernel (Debian Package)
-        env:
-          SCCACHE_GHA_ENABLED: "true" 
         run: |
           echo "⌛ Start Building Kernel (Debian Package) for arm64..."
           cd linux
-          make -j $(nproc) CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+          make -j $(nproc) bindeb-pkg
           echo "✅ Kernel (Debian Package) Built Successfully"
           cp .config ../linux-${{ needs.check.outputs.kernel_version }}-arm64.config
           echo "✅ Copied Kernel Config"
