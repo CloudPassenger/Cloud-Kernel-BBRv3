@@ -12,8 +12,8 @@
 ## 📦 项目概述
 
 本仓库提供集成增强功能的 Debian 内核自动构建：
-- 来自 Xanmod 的 **BBRv3 拥塞控制算法**
-- **ECHO-CPU-Scheduler** 低延迟任务调度器
+- 来自 Google 的 **BBRv3 拥塞控制算法** (使用来自 [xanmod](https://github.com/xanmod/linux) 的 BBRv3 补丁)
+- **ECHO-CPU-Scheduler** / **Bore-Scheduler** 低延迟任务调度器
 - 多架构支持 (x86_64 & arm64)
 - 每日自动构建跟踪最新安全更新
 

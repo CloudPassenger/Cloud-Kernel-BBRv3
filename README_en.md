@@ -12,8 +12,8 @@ Current Kernel Version: 6.12 (Mainline)
 ## 📦 Project Overview
 
 This repository provides automated daily builds of Debian kernel packages with enhanced networking and scheduling features:
-- Integrated **BBRv3 congestion control** from Xanmod patches
-- **ECHO-CPU-Scheduler** for improved task scheduling
+- Integrated **BBRv3 congestion control** from Google (using [xanmod](https://github.com/xanmod/linux) BBRv3 patches)
+- **ECHO-CPU-Scheduler** / **Bore-Scheduler** for improved task scheduling
 - Multi-architecture support (x86_64 & arm64)
 - Daily automatic builds tracking latest security patches
 
