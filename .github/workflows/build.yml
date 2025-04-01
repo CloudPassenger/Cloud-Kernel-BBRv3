@@ -69,7 +69,7 @@ jobs:
     if: needs.check.outputs.skip_build != 'true' || github.event.inputs.force_rebuild == 'true'
     strategy:
       matrix:
-        arch: [x86_64, arm64]
+        arch: [x86_64]
     outputs:
       kernel_version: ${{ needs.check.outputs.kernel_version }}
       build_time: ${{ steps.get_build_time.outputs.BUILD_TIMESTAMP }}
