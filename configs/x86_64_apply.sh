@@ -4,8 +4,7 @@
   ../linux-debian/debian/config/config \
   ../linux-debian/debian/config/amd64/config \
   ../linux-debian/debian/config/config.cloud \
-  ../linux-debian/debian/config/amd64/config.cloud-amd64 \
-  ../configs/x86_64.config
+  ../linux-debian/debian/config/amd64/config.cloud-amd64
 
 echo "⭕ Merged Configurations from Debian"
 
