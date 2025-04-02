@@ -1,0 +1,77 @@
+name: Check Kernel Version Updates (6.12 LTS)
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # Runs daily at 00:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check-kernel-versions:
+    name: Check Kernel Versions
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Workflow Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          
+      - name: Get Latest Kernel Version
+        id: get_kernel_version
+        run: |
+          kernel_version=$(curl -s https://www.kernel.org | grep -A 1 -m 1 "6.12" | grep -oP '\d+\.\d+\.\d+')
+          if [ -z "$kernel_version" ]; then
+            echo "❌ Failed to get kernel version for 6.12 LTS, please check the kernel version is correct."
+            exit 1
+          fi
+          echo "✅ Latest kernel version: $kernel_version"
+          echo "KERNEL_VERSION=$kernel_version" >> $GITHUB_OUTPUT
+          
+      - name: Check x86_64 Build Status
+        id: check_x86_64
+        run: |
+          echo "🔍 Looking for tag: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
+          TAG_EXISTS=$(git tag --list | grep -x "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}" || echo "")
+          if [ -n "$TAG_EXISTS" ]; then
+            echo "✅ x86_64 build already exists for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
+            echo "BUILD_NEEDED=false" >> $GITHUB_OUTPUT
+          else
+            echo "🔄 x86_64 build needed for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
+            echo "BUILD_NEEDED=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Check arm64 Build Status
+        id: check_arm64
+        run: |
+          echo "🔍 Looking for tag: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}-arm64"
+          TAG_EXISTS=$(git tag --list | grep -x "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}-arm64" || echo "")
+          if [ -n "$TAG_EXISTS" ]; then
+            echo "✅ arm64 build already exists for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
+            echo "BUILD_NEEDED=false" >> $GITHUB_OUTPUT
+          else
+            echo "🔄 arm64 build needed for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
+            echo "BUILD_NEEDED=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Trigger x86_64 Build Workflow if needed
+        if: steps.check_x86_64.outputs.BUILD_NEEDED == 'true'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: trigger-x86_64-build
+          client-payload: '{"kernel_version": "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"}'
+          
+      - name: Trigger arm64 Build Workflow if needed
+        if: steps.check_arm64.outputs.BUILD_NEEDED == 'true'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: trigger-arm64-build
+          client-payload: '{"kernel_version": "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"}'
+          
+      - name: Summary
+        run: |
+          echo "## Kernel Version Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 Kernel Version: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔄 x86_64 Build Needed: ${{ steps.check_x86_64.outputs.BUILD_NEEDED }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔄 arm64 Build Needed: ${{ steps.check_arm64.outputs.BUILD_NEEDED }}" >> $GITHUB_STEP_SUMMARY

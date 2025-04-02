@@ -1,8 +1,8 @@
 name: Build Debian Kernel (x86_64)
 
 on:
-  schedule:
-    - cron: "0 0 * * *" # Runs daily at 00:00 UTC
+  repository_dispatch:
+    types: [trigger-x86_64-build]
   workflow_dispatch:
     inputs:
       kernel_version:
@@ -12,58 +12,35 @@ on:
         type: choice
         options:
           - "6.12"
-      force_rebuild:
-        description: "Force rebuild"
-        required: false
-        default: false
-        type: boolean
-      skip_cache:
-        description: "Skip build cache"
-        required: false
-        default: false
-        type: boolean
 
 jobs:
-  check:
-    name: Check Kernel Version
+  prepare:
+    name: Prepare Build Parameters
     runs-on: ubuntu-24.04
     outputs:
-      kernel_version: ${{ steps.kernel_version.outputs.KERNEL_VERSION }}
-      skip_build: ${{ steps.check_tag.outputs.skip_build }}
+      kernel_version: ${{ steps.set_version.outputs.KERNEL_VERSION }}
     steps:
-      - name: Get Specified Kernel Version
-        id: kernel_version
+      - name: Set Kernel Version
+        id: set_version
         run: |
-          kernel_version=$(curl -s https://www.kernel.org | grep -A 1 -m 1 "${{ inputs.kernel_version }}" | grep -oP '\d+\.\d+\.\d+')
-          if [ -z "$kernel_version" ]; then
-            echo "❌ Failed to get kernel version: ${{ inputs.kernel_version }}, please check the kernel version is correct."
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            KERNEL_VERSION="${{ github.event.client_payload.kernel_version }}"
+          else
+            KERNEL_VERSION=$(curl -s https://www.kernel.org | grep -A 1 -m 1 "${{ inputs.kernel_version }}" | grep -oP '\d+\.\d+\.\d+')
+          fi
+          if [ -z "$KERNEL_VERSION" ]; then
+            echo "❌ Failed to get kernel version"
             exit 1
           fi
-          echo "✅ Kernel version: $kernel_version"
-          echo "KERNEL_VERSION=$kernel_version" >> $GITHUB_OUTPUT
-      - name: Checkout Workflow Source Code
-        uses: actions/checkout@v4
-        with:
-          fetch-tags: true
-      - name: Check if tag exists
-        id: check_tag
-        run: |
-          TAG_EXISTS=$(git tag --list | grep -x "${{ steps.kernel_version.outputs.KERNEL_VERSION }}" || echo "")
-          if [ -n "$TAG_EXISTS" ] && [ "${{ github.event.inputs.force_rebuild }}" != "true" ]; then
-            echo "Tag ${KERNEL_VERSION} exists. Skipping build."
-            echo "skip_build=true" >> $GITHUB_OUTPUT
-          else
-            echo "Proceeding with build."
-            echo "skip_build=false" >> $GITHUB_OUTPUT
-          fi
+          echo "✅ Using kernel version: $KERNEL_VERSION"
+          echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_OUTPUT
 
   build:
     name: Build Debian Kernel Package for x86_64
     runs-on: ubuntu-24.04
-    needs: check
-    if: needs.check.outputs.skip_build != 'true' || github.event.inputs.force_rebuild == 'true'
+    needs: prepare
     outputs:
-      kernel_version: ${{ needs.check.outputs.kernel_version }}
+      kernel_version: ${{ needs.prepare.outputs.kernel_version }}
       build_time: ${{ steps.get_build_time.outputs.BUILD_TIMESTAMP }}
     steps:
       - name: Update and install dependencies
@@ -79,16 +56,16 @@ jobs:
           fetch-tags: true
       - name: Download Linux Kernel Source
         run: |
-          echo "⌛ Downloading Linux Kernel Source Code for ${{ needs.check.outputs.kernel_version }}..."
-          wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${{ needs.check.outputs.kernel_version }}.tar.xz
-          tar -xf linux-${{ needs.check.outputs.kernel_version }}.tar.xz
-          rm linux-${{ needs.check.outputs.kernel_version }}.tar.xz
-          mv linux-${{ needs.check.outputs.kernel_version }} linux
-          echo "✅ Downloaded Linux Kernel Source Code for ${{ needs.check.outputs.kernel_version }}"
+          echo "⌛ Downloading Linux Kernel Source Code for ${{ needs.prepare.outputs.kernel_version }}..."
+          wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${{ needs.prepare.outputs.kernel_version }}.tar.xz
+          tar -xf linux-${{ needs.prepare.outputs.kernel_version }}.tar.xz
+          rm linux-${{ needs.prepare.outputs.kernel_version }}.tar.xz
+          mv linux-${{ needs.prepare.outputs.kernel_version }} linux
+          echo "✅ Downloaded Linux Kernel Source Code for ${{ needs.prepare.outputs.kernel_version }}"
       - name: Download Debian Kernel Additional Source
         run: |
           echo "⌛ Downloading Debian Kernel Additional Source..."
-          git clone -b debian/${{ needs.check.outputs.kernel_version }}-1 --depth=1 https://salsa.debian.org/kernel-team/linux.git linux-debian
+          git clone -b debian/${{ needs.prepare.outputs.kernel_version }}-1 --depth=1 https://salsa.debian.org/kernel-team/linux.git linux-debian
           echo "✅ Downloaded Debian Kernel Additional Source"
       - name: Download Xanmod Patches
         run: |
@@ -144,7 +121,7 @@ jobs:
           export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           make -j $(nproc) bindeb-pkg
           echo "✅ Kernel (Debian Package) Built Successfully"
-          cp .config ../linux-${{ needs.check.outputs.kernel_version }}-amd64.config
+          cp .config ../linux-${{ needs.prepare.outputs.kernel_version }}-amd64.config
           echo "✅ Copied Kernel Config"
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -165,8 +142,7 @@ jobs:
   
   create-release:
     name: Create Release
-    needs: [check, build]
-    if: needs.check.outputs.skip_build != 'true'
+    needs: [prepare, build]
     runs-on: ubuntu-24.04
     steps:
       - name: Download Artifacts for x86_64
@@ -182,10 +158,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.check.outputs.kernel_version }}
-          name: Debian Cloud Kernel ${{ needs.check.outputs.kernel_version }} with BBR3 (amd64)
+          tag_name: ${{ needs.prepare.outputs.kernel_version }}
+          name: Debian Cloud Kernel ${{ needs.prepare.outputs.kernel_version }} with BBR3 (amd64)
           body: |
-            🚀 **Kernel Version:** `${{ needs.check.outputs.kernel_version }}`
+            🚀 **Kernel Version:** `${{ needs.prepare.outputs.kernel_version }}`
 
             📅 **Build Time:** `${{ needs.build.outputs.build_time }}`
 
@@ -199,7 +175,7 @@ jobs:
             
             --------
             
-            🚀 **内核版本:** `${{ needs.check.outputs.kernel_version }}`
+            🚀 **内核版本:** `${{ needs.prepare.outputs.kernel_version }}`
 
             📅 **构建时间:** `${{ needs.build.outputs.build_time }}`
 
