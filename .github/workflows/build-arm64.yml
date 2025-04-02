@@ -19,21 +19,31 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       kernel_version: ${{ steps.set_version.outputs.KERNEL_VERSION }}
+      kernel_minor_version: ${{ steps.set_version.outputs.KERNEL_MINOR_VERSION }}
+      kernel_major_version: ${{ steps.set_version.outputs.KERNEL_MAJOR_VERSION }}
     steps:
       - name: Set Kernel Version
         id: set_version
         run: |
           if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
             KERNEL_VERSION="${{ github.event.client_payload.kernel_version }}"
+            KERNEL_MINOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 2)
+            KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
           else
             KERNEL_VERSION=$(curl -s https://www.kernel.org | grep -A 1 -m 1 "${{ inputs.kernel_version }}" | grep -oP '\d+\.\d+\.\d+')
+            KERNEL_MINOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 2)
+            KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
           fi
           if [ -z "$KERNEL_VERSION" ]; then
             echo "❌ Failed to get kernel version"
             exit 1
           fi
           echo "✅ Using kernel version: $KERNEL_VERSION"
+          echo "✅ Using kernel minor version: $KERNEL_MINOR_VERSION"
+          echo "✅ Using kernel major version: $KERNEL_MAJOR_VERSION"
           echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_OUTPUT
+          echo "KERNEL_MINOR_VERSION=$KERNEL_MINOR_VERSION" >> $GITHUB_OUTPUT
+          echo "KERNEL_MAJOR_VERSION=$KERNEL_MAJOR_VERSION" >> $GITHUB_OUTPUT
 
   build:
     name: Build Debian Kernel Package for arm64
@@ -88,9 +98,9 @@ jobs:
           cd linux
           cp -R ../linux-debian/debian/patches ./patches
           echo "⭕ Copied Debian Patches"
-          cp -R ../linux-xanmod-patches/linux-${{ inputs.kernel_version }}.y-xanmod/net ./patches/net
+          cp -R ../linux-xanmod-patches/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}.y-xanmod/net ./patches/net
           echo "⭕ Copied Xanmod Net Patches"
-          cp -R ../bore-patches/patches/stable/linux-${{ inputs.kernel_version }}-bore ./patches/cpu-scheduler
+          cp -R ../bore-patches/patches/stable/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-bore ./patches/cpu-scheduler
           echo "⭕ Copied Bore-Scheduler Patches"
           cp -R ../le9uo-patches/le9uo_patches ./patches/le9uo
           echo "⭕ Copied le9uo Patches"
@@ -102,7 +112,7 @@ jobs:
           echo "# CPU Scheduler Patches from ECHO-CPU-Scheduler" >> series
           find ./cpu-scheduler -type f -name "*.patch" -printf "cpu-scheduler/%P\n" | sort >> series
           echo "# le9uo OOM Protection Patches" >> series
-          find ./le9uo/stable -type f -name "*.patch" -printf "le9uo/stable/%P\n" | grep -w "0001-linux${{ inputs.kernel_version }}" >> series
+          find ./le9uo/stable -type f -name "*.patch" -printf "le9uo/stable/%P\n" | grep -w "0001-linux${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" >> series
           echo "le9uo/0002-vm.workingset_protection-On-by-default.patch" >> series
           echo "# Custom Patches" >> series
           find ./custom -type f -name "*.patch" -printf "custom/%P\n" | sort >> series
@@ -116,7 +126,7 @@ jobs:
       - name: Setup CCache
         uses: hendrikmuhs/ccache-action@v1
         with:
-          key: 'build-${{ inputs.kernel_version }}-arm64'
+          key: 'build-${{ needs.prepare.outputs.kernel_version }}-arm64'
       - name: Configure Kernel Build
         run: |
           echo "⌛ Configuring Kernel Build..."
