@@ -126,7 +126,7 @@ jobs:
       - name: Setup CCache
         uses: hendrikmuhs/ccache-action@v1
         with:
-          key: 'build-${{ needs.prepare.outputs.kernel_version }}-arm64'
+          key: 'build-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-arm64'
       - name: Configure Kernel Build
         run: |
           echo "⌛ Configuring Kernel Build..."
