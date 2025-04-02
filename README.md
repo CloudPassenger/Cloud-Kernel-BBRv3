@@ -2,7 +2,7 @@
 
 简体中文 | [English](README_en.md)
 
-| 集成 BBR3 和 ECHO 调度器的 Debian 定制内核
+> 集成 BBRv3/BBRPlus/Brutal，基于 Debian Cloud 内核配置，专门为VPS健壮运行优化的定制内核
 
 当前内核版本: 6.12 (Mainline)
 
@@ -22,6 +22,7 @@
 - 使用低延迟任务调度器取代默认调度器
   - x86_64 使用 **ECHO-CPU-Scheduler** (来自 [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
   - arm64 使用 **Bore-Scheduler** (来自 [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
+- 集成 **le9uo** OOM 保护补丁 (来自 [firelzrd/le9uo](https://github.com/firelzrd/le9uo))
 - 多架构支持 (x86_64 & arm64)，每日自动构建跟踪更新
 
 ## 🚀 核心特性
