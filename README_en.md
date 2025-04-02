@@ -22,7 +22,6 @@ This repository provides automated daily builds of Debian kernel packages with e
 - Low-latency task schedulers replacing the default scheduler:
   - x86_64 uses **ECHO-CPU-Scheduler** (from [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
   - arm64 uses **Bore-Scheduler** (from [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
-- Integrated **le9uo** OOM protection patches (from [firelzrd/le9uo](https://github.com/firelzrd/le9uo))
 - Multi-architecture support (x86_64 & arm64), daily automatic builds tracking updates
 
 ## 🚀 Key Features

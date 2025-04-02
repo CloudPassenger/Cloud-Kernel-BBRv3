@@ -88,11 +88,6 @@ jobs:
         with:
           repository: hamadmarri/ECHO-CPU-Scheduler
           path: echo-patches
-      - name: Checkout le9uo Patch
-        uses: actions/checkout@v4
-        with:
-          repository: firelzrd/le9uo
-          path: le9uo-patches
       - name: Organize Patches
         run: |
           echo "⌛ Organizing Patches..."
@@ -103,18 +98,12 @@ jobs:
           echo "⭕ Copied Xanmod Net Patches"
           cp -R ../echo-patches/${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}.y ./patches/cpu-scheduler
           echo "⭕ Copied ECHO-CPU-Scheduler Patches"
-          cp -R ../le9uo-patches/le9uo_patches ./patches/le9uo
-          echo "⭕ Copied le9uo Patches"
           cp -R ../patches ./patches/custom
-          echo "⭕ Copied custom patches"
           cd patches
           echo "# Net Patches from Xanmod" >> series
           find ./net -type f -name "*.patch" -printf "net/%P\n" | sort >> series
           echo "# CPU Scheduler Patches from ECHO-CPU-Scheduler" >> series
           find ./cpu-scheduler -type f -name "*.patch" -printf "cpu-scheduler/%P\n" | sort >> series
-          echo "# le9uo OOM Protection Patches" >> series
-          find ./le9uo/stable -type f -name "*.patch" -printf "le9uo/stable/%P\n" | grep -w "0001-linux${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" >> series
-          echo "le9uo/0002-vm.workingset_protection-On-by-default.patch" >> series
           echo "# Custom Patches" >> series
           find ./custom -type f -name "*.patch" -printf "custom/%P\n" | sort >> series
           echo "✅ All Patches Organized"
@@ -196,7 +185,6 @@ jobs:
               - `BBRPlus` (modified from [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
               - `TCP Brutal` (from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
               - `ECHO-CPU-Scheduler` (from [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
-              - `le9uo OOM Protection` (from [firelzrd/le9uo](https://github.com/firelzrd/le9uo))
             
             --------
             
@@ -213,7 +201,6 @@ jobs:
               - `BBRPlus` (修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
               - `TCP Brutal` (来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
               - `ECHO-CPU-Scheduler` (来自 [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
-              - `le9uo 内存保护补丁` (来自 [firelzrd/le9uo](https://github.com/firelzrd/le9uo))
           files: |
             *.deb
             *.changes
