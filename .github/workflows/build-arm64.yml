@@ -172,6 +172,7 @@ jobs:
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
               - `BBRPlus` (modified from [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
+              - `TCP Brutal` (from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
               - `Bore-Scheduler` (from [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
             
             --------
@@ -187,6 +188,7 @@ jobs:
               - `Debian 补丁集合` (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
               - `BBRPlus` (修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
+              - `TCP Brutal` (来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
               - `Bore-Scheduler` (来自 [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
           files: |
             *.deb

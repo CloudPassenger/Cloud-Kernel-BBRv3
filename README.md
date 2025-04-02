@@ -18,6 +18,7 @@
   - 更新来自 Google 的 **BBRv3 拥塞控制算法** (来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
   - 保留原版 BBRv1 算法 （拥塞控制算法设置为 `bbr1` 使用）
   - 集成来自 dog250 & cx9208 的魔改 **BBRPlus** 拥塞控制算法 (修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
+- 内置 **TCP Brutal** 多路复用拥塞控制算法 (来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
 - 使用低延迟任务调度器取代默认调度器
   - x86_64 使用 **ECHO-CPU-Scheduler** (来自 [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
   - arm64 使用 **Bore-Scheduler** (来自 [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
