@@ -113,9 +113,10 @@ jobs:
           quilt push -a --fuzz=0
           echo "✅ All Patches Applied"
       - name: Setup CCache
-        uses: hendrikmuhs/ccache-action@v1
+        uses: hendrikmuhs/ccache-action@v1.2.17
         with:
           key: 'build-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-arm64'
+          create-symlink: true
       - name: Configure Kernel Build
         run: |
           echo "⌛ Configuring Kernel Build..."
@@ -128,7 +129,6 @@ jobs:
         run: |
           echo "⌛ Start Building Kernel (Debian Package) for arm64..."
           cd linux
-          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           make -j $(nproc) bindeb-pkg
           echo "✅ Kernel (Debian Package) Built Successfully"
           cp .config ../linux-${{ needs.prepare.outputs.kernel_version }}-arm64.config
