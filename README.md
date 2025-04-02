@@ -12,20 +12,26 @@
 ## 📦 项目概述
 
 本仓库提供集成增强功能的 Debian 内核自动构建：
-- 来自 Google 的 **BBRv3 拥塞控制算法** (使用来自 [xanmod](https://github.com/xanmod/linux) 的 BBRv3 补丁)
-- **ECHO-CPU-Scheduler** / **Bore-Scheduler** 低延迟任务调度器
-- 多架构支持 (x86_64 & arm64)
-- 每日自动构建跟踪最新安全更新
+- 使用 Linux Kernel 官方 6.12 源码 (来自 [kernel.org](https://cdn.kernel.org/pub/linux/kernel/v6.x/))
+- 集成 Debian 内核团队维护的补丁 (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
+- **BBR 拥塞控制算法更新!**
+  - 更新来自 Google 的 **BBRv3 拥塞控制算法** (来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
+  - 保留原版 BBRv1 算法 （拥塞控制算法设置为 `bbr1` 使用）
+  - 集成来自 dog250 & cx9208 的魔改 **BBRPlus** 拥塞控制算法 (修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
+- 使用低延迟任务调度器取代默认调度器
+  - x86_64 使用 **ECHO-CPU-Scheduler** (来自 [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
+  - arm64 使用 **Bore-Scheduler** (来自 [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
+- 多架构支持 (x86_64 & arm64)，每日自动构建跟踪更新
 
 ## 🚀 核心特性
 
 | 组件               | 详细信息                                                               |
 |--------------------|-----------------------------------------------------------------------|
-| 内核基础           | 最新稳定版 Debian 内核 (v6.12 系列)                                  |
-| 网络优化           | BBRv3 拥塞控制算法                                                   |
-| CPU 调度器         | ECHO 低延迟调度器                                                     |
-| 支持架构           | x86_64 (amd64) 和 arm64 (aarch64)                                   |
-| 构建频率           | 每日自动构建 + 支持手动触发                                           |
+| 内核基础           | 最新 LTS 内核  (v6.12 系列) + Debian 团队补丁                            |
+| 网络优化           | BBRv3/BBRPlus/BBRv1 拥塞控制算法                                        |
+| CPU 调度器         | ECHO/Bore 低延迟调度器                                                  |
+| 支持架构           | x86_64 (amd64) 和 arm64 (aarch64)                                      |
+| 构建频率           | 每日自动构建 + 支持手动触发                                              |
 
 ## 📥 安装指南
 
@@ -50,8 +56,8 @@
 重启后执行：
 ```bash
 uname -r   # 应显示安装的内核版本
-cat /sys/kernel/debug/sched_features  # 验证 ECHO 调度器特性
-sysctl net.ipv4.tcp_congestion_control  # 应显示 'bbr'
+cat /sys/kernel/debug/sched_features  # 验证 ECHO/Bore 调度器特性
+sysctl net.ipv4.tcp_available_congestion_control  # 应显示 'bbr bbrplus bbr1'
 ```
 
 ## 🔧 自定义构建说明

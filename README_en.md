@@ -1,6 +1,6 @@
 # Cloud Kernel BBRv3
 
-English | [简体中文](README_zh.md)
+English | [简体中文](README.md)
 
 | Debian Custom Kernel with BBR3 and ECHO Scheduler
 
@@ -12,18 +12,24 @@ Current Kernel Version: 6.12 (Mainline)
 ## 📦 Project Overview
 
 This repository provides automated daily builds of Debian kernel packages with enhanced networking and scheduling features:
-- Integrated **BBRv3 congestion control** from Google (using [xanmod](https://github.com/xanmod/linux) BBRv3 patches)
-- **ECHO-CPU-Scheduler** / **Bore-Scheduler** for improved task scheduling
-- Multi-architecture support (x86_64 & arm64)
-- Daily automatic builds tracking latest security patches
+- Using official Linux Kernel 6.12 source code (from [kernel.org](https://cdn.kernel.org/pub/linux/kernel/v6.x/))
+- Integrating patches maintained by the Debian kernel team (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
+- **BBR Congestion Control Algorithm Updates!**
+  - Updated **BBRv3 congestion control** from Google (using [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
+  - Retained original BBRv1 algorithm (set congestion control to `bbr1` to use)
+  - Integrated modified **BBRPlus** congestion control algorithm from dog250 & cx9208 (modified from [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
+- Low-latency task schedulers replacing the default scheduler:
+  - x86_64 uses **ECHO-CPU-Scheduler** (from [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
+  - arm64 uses **Bore-Scheduler** (from [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
+- Multi-architecture support (x86_64 & arm64), daily automatic builds tracking updates
 
 ## 🚀 Key Features
 
 | Component          | Details                                                                 |
 |--------------------|-------------------------------------------------------------------------|
-| Kernel Base        | Latest stable Debian kernel (v6.12 series)                             |
-| Network Optimize   | BBRv3 congestion control algorithm                                    |
-| CPU Scheduler      | ECHO low-latency scheduler                                             |
+| Kernel Base        | Latest LTS kernel (v6.12 series) + Debian team patches                 |
+| Network Optimize   | BBRv3/BBRPlus/BBRv1 congestion control algorithms                      |
+| CPU Scheduler      | ECHO/Bore low-latency schedulers                                       |
 | Architecture       | x86_64 (amd64) & arm64 (aarch64)                                      |
 | Build Frequency    | Daily automatic builds + manual trigger support                        |
 
@@ -50,8 +56,8 @@ This repository provides automated daily builds of Debian kernel packages with e
 After reboot:
 ```bash
 uname -r  # Should show installed kernel version
-cat /sys/kernel/debug/sched_features  # Verify ECHO scheduler features
-sysctl net.ipv4.tcp_congestion_control  # Should display 'bbr'
+cat /sys/kernel/debug/sched_features  # Verify ECHO/Bore scheduler features
+sysctl net.ipv4.tcp_available_congestion_control  # Should display 'bbr bbrplus bbr1'
 ```
 
 ## 🔧 Custom Build Instructions
