@@ -195,7 +195,7 @@ jobs:
             - **Applied Patches:**
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
-              - `ECHO-CPU-Scheduler` (from [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
+              - `Bore-Scheduler` (from [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
             
             --------
             
@@ -209,7 +209,7 @@ jobs:
             - **应用补丁:**
               - `Debian 补丁集合` (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
-              - `ECHO-CPU-Scheduler` (来自 [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
+              - `Bore-Scheduler` (来自 [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
           files: |
             *.deb
             *.changes
