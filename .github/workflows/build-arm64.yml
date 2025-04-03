@@ -122,12 +122,6 @@ jobs:
           cd linux
           quilt push -a --fuzz=0
           echo "✅ All Patches Applied"
-      - name: Setup LLVM Toolchain
-        run: |
-          wget https://apt.llvm.org/llvm.sh -O llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 20
-          echo "✅ LLVM 20 Toolchain Setup"
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
@@ -160,7 +154,7 @@ jobs:
           cd linux
           cp ../configs/arm64.config .config
           echo "⭕ Copied Pre-Configured .config from arm64"
-          make LLVM="-20" CC="sccache clang" HOSTCC="sccache clang" olddefconfig
+          make CC="sccache gcc" HOSTCC="sccache gcc" olddefconfig
           echo "✅ Final Kernel Build Configured for arm64"
       - name: Build Kernel (Debian Package)
         env:
@@ -171,7 +165,7 @@ jobs:
         run: |
           echo "⌛ Start Building Kernel (Debian Package) for arm64..."
           cd linux
-          make LLVM="-20" CC="sccache clang" HOSTCC="sccache clang" -j $(nproc) bindeb-pkg
+          make -j $(nproc) CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg
           echo "✅ Kernel (Debian Package) Built Successfully"
           cp .config ../linux-${{ needs.prepare.outputs.kernel_version }}-arm64.config
           echo "✅ Copied Kernel Config"
