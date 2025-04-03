@@ -12,27 +12,35 @@ on:
         type: choice
         options:
           - "6.12"
+      skip_cache:
+        description: "Skip Cache"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   prepare:
     name: Prepare Build Parameters
     runs-on: ubuntu-24.04
     outputs:
-      kernel_version: ${{ steps.set_version.outputs.KERNEL_VERSION }}
-      kernel_minor_version: ${{ steps.set_version.outputs.KERNEL_MINOR_VERSION }}
-      kernel_major_version: ${{ steps.set_version.outputs.KERNEL_MAJOR_VERSION }}
+      kernel_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_VERSION }}
+      kernel_minor_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_MINOR_VERSION }}
+      kernel_major_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_MAJOR_VERSION }}
+      skip_cache: ${{ steps.prepare_build_parameters.outputs.SKIP_CACHE }}
     steps:
-      - name: Set Kernel Version
-        id: set_version
+      - name: Prepare Build Parameters
+        id: prepare_build_parameters
         run: |
           if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
             KERNEL_VERSION="${{ github.event.client_payload.kernel_version }}"
             KERNEL_MINOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 2)
             KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
+            SKIP_CACHE=false
           else
             KERNEL_VERSION=$(curl -s https://www.kernel.org | grep -A 1 -m 1 "${{ inputs.kernel_version }}" | grep -oP '\d+\.\d+\.\d+')
             KERNEL_MINOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 2)
             KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
+            SKIP_CACHE="${{ inputs.skip_cache }}" || SKIP_CACHE=false
           fi
           if [ -z "$KERNEL_VERSION" ]; then
             echo "❌ Failed to get kernel version"
@@ -41,10 +49,11 @@ jobs:
           echo "✅ Using kernel version: $KERNEL_VERSION"
           echo "✅ Using kernel minor version: $KERNEL_MINOR_VERSION"
           echo "✅ Using kernel major version: $KERNEL_MAJOR_VERSION"
+          echo "✅ Using skip cache: $SKIP_CACHE"
           echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_OUTPUT
           echo "KERNEL_MINOR_VERSION=$KERNEL_MINOR_VERSION" >> $GITHUB_OUTPUT
           echo "KERNEL_MAJOR_VERSION=$KERNEL_MAJOR_VERSION" >> $GITHUB_OUTPUT
-
+          echo "SKIP_CACHE=$SKIP_CACHE" >> $GITHUB_OUTPUT
 
   build:
     name: Build Debian Kernel Package for x86_64
@@ -113,27 +122,51 @@ jobs:
           cd linux
           quilt push -a --fuzz=0
           echo "✅ All Patches Applied"
-      - name: Setup CCache
-        uses: hendrikmuhs/ccache-action@v1.2.17
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          key: 'build-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-x86_64'
-          create-symlink: true
+          version: "v0.10.0"
+      - name: Set sccache environment variables
+        run: |
+          # Use Local storage for sccache, and push it to GHA later
+          sccache --start-server
+          echo "SCCACHE_CACHE_SIZE=5G" >> $GITHUB_ENV
+          echo "SCCACHE_CACHE=$(sccache --show-stats | grep Local | cut -d '"' -f2)" >> $GITHUB_ENV
+          echo "DATE_STRING=$(date +'%Y%m%d')" >> $GITHUB_ENV
+          sccache --stop-server
+      - name: Recover sccache from GHA
+        uses: actions/cache@v4
+        env:
+          SCCACHE_CACHE: ${{ env.SCCACHE_CACHE }}
+          DATE_STRING: ${{ env.DATE_STRING }}
+        with:
+          path: ${{ env.SCCACHE_CACHE }}
+          lookup-only: ${{ needs.prepare.outputs.skip_cache }}
+          key: sccache-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-x86_64-${{ env.DATE_STRING }}
+          restore-keys: |
+            sccache-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-x86_64-
+      - name: Start sccache server
+        run: |
+          sccache --start-server
       - name: Configure Kernel Build
         run: |
           echo "⌛ Configuring Kernel Build..."
           cd linux
           cp ../configs/x86_64.config .config
           echo "⭕ Copied Pre-Configured .config from x86_64"
-          make olddefconfig
+          make CC="sccache gcc" HOSTCC="sccache gcc" olddefconfig
           echo "✅ Final Kernel Build Configured for x86_64"
       - name: Build Kernel (Debian Package)
         run: |
           echo "⌛ Start Building Kernel (Debian Package) for x86_64..."
           cd linux
-          make -j $(nproc) bindeb-pkg
+          make -j $(nproc) CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg
           echo "✅ Kernel (Debian Package) Built Successfully"
           cp .config ../linux-${{ needs.prepare.outputs.kernel_version }}-amd64.config
           echo "✅ Copied Kernel Config"
+      - name: Cleanup sccache
+        run: |
+          sccache --stop-server
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
