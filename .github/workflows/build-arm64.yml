@@ -126,6 +126,12 @@ jobs:
           uses: mozilla-actions/sccache-action@v0.0.9
           with:
             version: "v0.10.0"
+      - name: Setup LLVM Toolchain
+        run: |
+          wget https://apt.llvm.org/llvm.sh -O llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 20
+          echo "✅ LLVM 20 Toolchain Setup"
       - name: Set sccache environment variables
         run: |
           # Use Local storage for sccache, and push it to GHA later
@@ -154,13 +160,16 @@ jobs:
           cd linux
           cp ../configs/arm64.config .config
           echo "⭕ Copied Pre-Configured .config from arm64"
-          make CC="sccache gcc" HOSTCC="sccache gcc" olddefconfig
+          make LLVM="-20" CC="sccache clang" HOSTCC="sccache clang" olddefconfig
           echo "✅ Final Kernel Build Configured for arm64"
       - name: Build Kernel (Debian Package)
+        env:
+          KBUILD_BUILD_USER: "cloudpassenger"
+          KBUILD_BUILD_HOST: "github-actions"
         run: |
           echo "⌛ Start Building Kernel (Debian Package) for arm64..."
           cd linux
-          make -j $(nproc) CC="sccache gcc" HOSTCC="sccache gcc" bindeb-pkg
+          make LLVM="-20" CC="sccache clang" HOSTCC="sccache clang" -j $(nproc) bindeb-pkg
           echo "✅ Kernel (Debian Package) Built Successfully"
           cp .config ../linux-${{ needs.prepare.outputs.kernel_version }}-arm64.config
           echo "✅ Copied Kernel Config"
