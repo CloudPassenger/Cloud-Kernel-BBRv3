@@ -36,6 +36,38 @@ This repository provides automated daily builds of Debian kernel packages with e
 
 ## 📥 Installation Guide
 
+### One-click Installation Script
+
+Use our one-click installation script to quickly install the latest or a specific kernel version:
+
+```bash
+# Download the installation script
+wget https://raw.githubusercontent.com/CloudPassenger/Cloud-Kernel-BBRv3/main/install-kernel.sh
+chmod +x install-kernel.sh
+
+# Interactive installation (recommended for new users)
+./install-kernel.sh
+
+# Automatic installation of the latest kernel
+./install-kernel.sh install
+
+# Specify language (zh for Chinese or en for English)
+./install-kernel.sh -l en install
+
+# Install a specific kernel version and skip reboot
+./install-kernel.sh install -v 6.12.21 -a
+```
+
+Script parameters:
+- Global options
+  - `-l, --language`: Set language (zh/en), defaults to Chinese
+- Commands
+  - `install`: Directly install the latest kernel
+  - `help`: Display help information
+- Install command options
+  - `-v, --version`: Specify kernel version to install
+  - `-a, --no-reboot`: Skip reboot after installation
+
 ### Pre-built Packages
 
 1. Download the latest build from [Releases](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/releases)

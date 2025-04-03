@@ -36,6 +36,38 @@
 
 ## 📥 安装指南
 
+### 一键安装脚本
+
+使用我们提供的一键安装脚本，可以快速安装最新或指定版本的内核：
+
+```bash
+# 下载安装脚本
+wget https://raw.githubusercontent.com/CloudPassenger/Cloud-Kernel-BBRv3/main/install-kernel.sh
+chmod +x install-kernel.sh
+
+# 交互式安装（推荐新用户使用）
+./install-kernel.sh
+
+# 自动安装最新版内核
+./install-kernel.sh install
+
+# 指定语言 (zh 中文或 en 英文)
+./install-kernel.sh -l en install
+
+# 安装指定版本的内核且安装后不重启
+./install-kernel.sh install -v 6.12.21 -a
+```
+
+脚本支持的参数：
+- 全局参数
+  - `-l, --language`：设置语言 (zh/en)，默认为中文
+- 命令
+  - `install`：直接安装最新版本内核
+  - `help`：显示帮助信息
+- install 命令参数
+  - `-v, --version`：指定要安装的内核版本
+  - `-a, --no-reboot`：安装后不自动重启
+
 ### 预构建软件包
 
 1. 从 [发布页面](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/releases) 下载最新构建包
