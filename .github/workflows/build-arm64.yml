@@ -166,6 +166,8 @@ jobs:
         env:
           KBUILD_BUILD_USER: "cloudpassenger"
           KBUILD_BUILD_HOST: "github-actions"
+          KBUILD_BUILD_TIMESTAMP: ""
+          KDEB_COMPRESS: "xz"
         run: |
           echo "⌛ Start Building Kernel (Debian Package) for arm64..."
           cd linux
