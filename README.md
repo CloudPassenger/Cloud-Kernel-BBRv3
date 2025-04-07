@@ -4,7 +4,7 @@
 
 > 集成 BBRv3/BBRPlus/Brutal，基于 Debian Cloud 内核配置，专门为VPS健壮运行优化的定制内核
 
-当前内核版本: 6.12 (Mainline)
+当前内核版本: 6.12 (稳定版)
 
 [![CI for x86_64](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions)
 [![CI for arm64](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build-arm64.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions)

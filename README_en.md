@@ -4,7 +4,7 @@ English | [简体中文](README.md)
 
 > A Debian custom kernel with BBRv3/BBRPlus/Brutal, based on Debian Cloud kernel configuration, optimized for VPS stable operation
 
-Current Kernel Version: 6.12 (Mainline)
+Current Kernel Version: 6.12 (Stable)
 
 [![CI for x86_64](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions)
 [![CI for arm64](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build-arm64.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions)
