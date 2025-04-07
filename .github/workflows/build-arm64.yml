@@ -8,10 +8,8 @@ on:
       kernel_version:
         description: "Kernel version"
         required: true
-        default: "6.12"
-        type: choice
-        options:
-          - "6.12"
+        default: "6.12.21"
+        type: string
       skip_cache:
         description: "Skip Cache"
         required: false
@@ -37,7 +35,7 @@ jobs:
             KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
             SKIP_CACHE=false
           else
-            KERNEL_VERSION=$(curl -s https://www.kernel.org | grep -A 1 -m 1 "${{ inputs.kernel_version }}" | grep -oP '\d+\.\d+\.\d+')
+            KERNEL_VERSION="${{ inputs.kernel_version }}"
             KERNEL_MINOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 2)
             KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
             SKIP_CACHE="${{ inputs.skip_cache }}" || SKIP_CACHE=false
