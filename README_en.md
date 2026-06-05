@@ -87,8 +87,9 @@ Script parameters:
 After reboot:
 ```bash
 uname -r  # Should show installed kernel version
-cat /sys/kernel/debug/sched_features  # Inspect EEVDF-related scheduler features
-sysctl net.ipv4.tcp_available_congestion_control  # Should display 'bbr bbrplus bbr1'
+modinfo tcp_bbr1 tcp_bbrplus tcp_brutal  # Confirm the modules are installed
+sudo modprobe tcp_bbr1 tcp_bbrplus tcp_brutal  # Load modules before checking available algorithms
+sysctl net.ipv4.tcp_available_congestion_control  # Should include bbr, bbr1, bbrplus, brutal
 ```
 
 ## 🔧 Custom Build Instructions

@@ -87,8 +87,9 @@ chmod +x install-kernel.sh
 重启后执行：
 ```bash
 uname -r   # 应显示安装的内核版本
-cat /sys/kernel/debug/sched_features  # 查看 EEVDF 相关调度特性
-sysctl net.ipv4.tcp_available_congestion_control  # 应显示 'bbr bbrplus bbr1'
+modinfo tcp_bbr1 tcp_bbrplus tcp_brutal  # 确认模块已安装
+sudo modprobe tcp_bbr1 tcp_bbrplus tcp_brutal  # 加载模块后再查看可用算法
+sysctl net.ipv4.tcp_available_congestion_control  # 应包含 bbr、bbr1、bbrplus、brutal
 ```
 
 ## 🔧 自定义构建说明
@@ -123,4 +124,3 @@ sysctl net.ipv4.tcp_available_congestion_control  # 应显示 'bbr bbrplus bbr1'
 ## 📜 许可证
 
 本项目采用 [Unlicense](https://unlicense.org/) 许可证。
-
