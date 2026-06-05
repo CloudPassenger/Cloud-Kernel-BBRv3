@@ -9,6 +9,7 @@
 echo "⭕ Merged Configurations from Debian"
 
 # Kernel Config
+./scripts/config --enable CONFIG_SCHED_CLASS_EXT
 ./scripts/config --enable CONFIG_IKCONFIG
 ./scripts/config --enable CONFIG_IKCONFIG_PROC
 # Virtualization
