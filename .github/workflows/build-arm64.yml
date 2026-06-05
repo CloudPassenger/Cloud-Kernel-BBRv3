@@ -101,7 +101,7 @@ jobs:
           cd linux
           cp -R ../linux-debian/debian/patches ./patches
           echo "⭕ Copied Debian Patches"
-          cp -R ../linux-xanmod-patches/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}.y-xanmod/net ./patches/net
+          cp -R ../linux-xanmod-patches/eol/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}.y-xanmod/net ./patches/net
           echo "⭕ Copied Xanmod Net Patches"
           cp -R ../bore-patches/patches/stable/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-bore ./patches/cpu-scheduler
           echo "⭕ Copied Bore-Scheduler Patches"
