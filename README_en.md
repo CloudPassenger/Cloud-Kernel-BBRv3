@@ -19,9 +19,7 @@ This repository provides automated daily builds of Debian kernel packages with e
   - Retained original BBRv1 algorithm (set congestion control to `bbr1` to use)
   - Integrated modified **BBRPlus** congestion control algorithm from dog250 & cx9208 (modified from [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
 - Integrated **TCP Brutal** multiplexing (mux) congestion control algorithm from apernet (from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
-- Low-latency task schedulers replacing the default scheduler:
-  - Uses **ECHO-CPU-Scheduler** (from [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
-  - Disabled **Bore-Scheduler** (from [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler)) due to compilation error
+- Uses the upstream Linux 6.12 **EEVDF** fair scheduler by default without third-party Scheduler patches
 - Multi-architecture support (x86_64 & arm64), daily automatic builds tracking updates
 
 ## 🚀 Key Features
@@ -30,7 +28,7 @@ This repository provides automated daily builds of Debian kernel packages with e
 |--------------------|-------------------------------------------------------------------------|
 | Kernel Base        | Latest LTS kernel (v6.12 series) + Debian team patches                 |
 | Network Optimize   | BBRv3/BBRPlus/BBRv1 congestion control algorithms                      |
-| CPU Scheduler      | ECHO/Bore low-latency schedulers                                       |
+| CPU Scheduler      | Upstream Linux 6.12 EEVDF fair scheduler                              |
 | Architecture       | x86_64 (amd64) & arm64 (aarch64)                                      |
 | Build Frequency    | Daily automatic builds + manual trigger support                        |
 
@@ -89,7 +87,7 @@ Script parameters:
 After reboot:
 ```bash
 uname -r  # Should show installed kernel version
-cat /sys/kernel/debug/sched_features  # Verify ECHO/Bore scheduler features
+cat /sys/kernel/debug/sched_features  # Inspect EEVDF-related scheduler features
 sysctl net.ipv4.tcp_available_congestion_control  # Should display 'bbr bbrplus bbr1'
 ```
 

@@ -19,9 +19,7 @@
   - 保留原版 BBRv1 算法 （拥塞控制算法设置为 `bbr1` 使用）
   - 集成来自 dog250 & cx9208 的魔改 **BBRPlus** 拥塞控制算法 (修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
 - 内置 **TCP Brutal** 多路复用拥塞控制算法 (来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
-- 使用低延迟任务调度器取代默认调度器
-  - 使用 **Bore-Scheduler** (来自 [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
-  - 暂时禁用 **ECHO-CPU-Scheduler** (来自 [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
+- 使用 Linux 6.12 上游 **EEVDF** 公平调度器，默认启用且不引入第三方 Scheduler 补丁
 - 多架构支持 (x86_64 & arm64)，每日自动构建跟踪更新
 
 ## 🚀 核心特性
@@ -30,7 +28,7 @@
 |--------------------|-----------------------------------------------------------------------|
 | 内核基础           | 最新 LTS 内核  (v6.12 系列) + Debian 团队补丁                            |
 | 网络优化           | BBRv3/BBRPlus/BBRv1 拥塞控制算法                                        |
-| CPU 调度器         | ECHO/Bore 低延迟调度器                                                  |
+| CPU 调度器         | Linux 6.12 上游 EEVDF 公平调度器                                        |
 | 支持架构           | x86_64 (amd64) 和 arm64 (aarch64)                                      |
 | 构建频率           | 每日自动构建 + 支持手动触发                                              |
 
@@ -89,7 +87,7 @@ chmod +x install-kernel.sh
 重启后执行：
 ```bash
 uname -r   # 应显示安装的内核版本
-cat /sys/kernel/debug/sched_features  # 验证 ECHO/Bore 调度器特性
+cat /sys/kernel/debug/sched_features  # 查看 EEVDF 相关调度特性
 sysctl net.ipv4.tcp_available_congestion_control  # 应显示 'bbr bbrplus bbr1'
 ```
 
@@ -125,5 +123,4 @@ sysctl net.ipv4.tcp_available_congestion_control  # 应显示 'bbr bbrplus bbr1'
 ## 📜 许可证
 
 本项目采用 [Unlicense](https://unlicense.org/) 许可证。
-
 

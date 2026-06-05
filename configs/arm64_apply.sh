@@ -8,9 +8,6 @@
 
 echo "⭕ Merged Configurations from Debian"
 
-./scripts/config --enable CONFIG_SCHED_BORE
-echo "⭕ Applied settings from Bore-Scheduler"
-
 # Kernel Config
 ./scripts/config --enable CONFIG_IKCONFIG
 ./scripts/config --enable CONFIG_IKCONFIG_PROC

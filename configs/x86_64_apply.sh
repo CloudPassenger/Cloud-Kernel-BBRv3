@@ -8,15 +8,6 @@
 
 echo "⭕ Merged Configurations from Debian"
 
-# ./scripts/config --disable CONFIG_FAIR_GROUP_SCHED
-# ./scripts/config --disable CONFIG_SCHED_AUTOGROUP
-# ./scripts/config --disable CONFIG_SCHED_CORE
-# ./scripts/config --enable CONFIG_ECHO_SCHED
-# echo "⭕ Applied settings from ECHO-CPU-Scheduler"
-
-./scripts/config --enable CONFIG_SCHED_BORE
-echo "⭕ Applied settings from Bore-Scheduler"
-
 # Kernel Config
 ./scripts/config --enable CONFIG_IKCONFIG
 ./scripts/config --enable CONFIG_IKCONFIG_PROC
@@ -102,4 +93,3 @@ echo "⭕ Applied settings from Bore-Scheduler"
 ./scripts/config --module CONFIG_CRYPTO_CRC32C_INTEL
 ./scripts/config --module CONFIG_CRYPTO_CRC32_PCLMUL
 echo "⭕ Applied custom kernel settings"
-

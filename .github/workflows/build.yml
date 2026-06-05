@@ -90,16 +90,6 @@ jobs:
           echo "⌛ Downloading Xanmod Patches..."
           git clone --depth=1 https://gitlab.com/xanmod/linux-patches.git linux-xanmod-patches
           echo "✅ Downloaded Xanmod Patches"
-      # - name: Checkout ECHO-CPU-Scheduler
-      #   uses: actions/checkout@v4
-      #   with:
-      #     repository: hamadmarri/ECHO-CPU-Scheduler
-      #     path: echo-patches
-      - name: Checkout Bore-Scheduler Patches
-        uses: actions/checkout@v4
-        with:
-          repository: firelzrd/bore-scheduler
-          path: bore-patches
       - name: Organize Patches
         run: |
           echo "⌛ Organizing Patches..."
@@ -108,16 +98,10 @@ jobs:
           echo "⭕ Copied Debian Patches"
           cp -R ../linux-xanmod-patches/eol/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}.y-xanmod/net ./patches/net
           echo "⭕ Copied Xanmod Net Patches"
-          # cp -R ../echo-patches/${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}.y ./patches/cpu-scheduler
-          # echo "⭕ Copied ECHO-CPU-Scheduler Patches"
-          cp -R ../bore-patches/patches/stable/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-bore ./patches/cpu-scheduler
-          echo "⭕ Copied Bore-Scheduler Patches"
           cp -R ../kernel_patches/${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }} ./patches/custom
           cd patches
           echo "# Net Patches from Xanmod" >> series
           find ./net -type f -name "*.patch" -printf "net/%P\n" | sort >> series
-          echo "# CPU Scheduler Patches from ECHO-CPU-Scheduler" >> series
-          find ./cpu-scheduler -type f -name "*.patch" -printf "cpu-scheduler/%P\n" | sort >> series
           echo "# Custom Patches" >> series
           find ./custom -type f -name "*.patch" -printf "custom/%P\n" | sort >> series
           echo "✅ All Patches Organized"
@@ -202,8 +186,6 @@ jobs:
               - `BBR V3` (from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
               - `BBRPlus` (modified from [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
               - `TCP Brutal` (from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
-              - `Bore-Scheduler` (from [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
-              - ⚠️ Temporarily disabled `ECHO-CPU-Scheduler` (from [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
             
             --------
             
@@ -219,12 +201,9 @@ jobs:
               - `BBR V3` (来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
               - `BBRPlus` (修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
               - `TCP Brutal` (来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
-              - `Bore-Scheduler` (来自 [firelzrd/bore-scheduler](https://github.com/firelzrd/bore-scheduler))
-              - ⚠️ 暂时禁用 `ECHO-CPU-Scheduler` (来自 [hamadmarri/ECHO-CPU-Scheduler](https://github.com/hamadmarri/ECHO-CPU-Scheduler))
           files: |
             *.deb
             *.changes
             *.buildinfo
             *.config
         
-
