@@ -35,7 +35,7 @@
 
 ### 一键安装脚本
 
-使用我们提供的一键安装脚本，可以快速安装最新或指定版本的内核：
+使用我们提供的一键安装脚本，可以按内核系列安装最新版本或指定的完整版本：
 
 ```bash
 # 下载安装脚本
@@ -45,24 +45,25 @@ chmod +x install-kernel.sh
 # 交互式安装（推荐新用户使用）
 ./install-kernel.sh
 
-# 自动安装最新版内核
+# 自动安装默认 7.1 系列的最新内核
 ./install-kernel.sh install
 
-# 指定语言 (zh 中文或 en 英文)
-./install-kernel.sh -l en install
+# 安装 6.18 系列的最新内核，并使用英文界面
+./install-kernel.sh -l en install --series 6.18
 
-# 安装指定版本的内核且安装后不重启
-./install-kernel.sh install -v 6.12.21 -a
+# 安装指定版本的内核且安装后不重启（未指定系列时会从版本号推断）
+./install-kernel.sh install --version 6.12.21 --no-reboot
 ```
 
 脚本支持的参数：
 - 全局参数
   - `-l, --language`：设置语言 (zh/en)，默认为中文
 - 命令
-  - `install`：直接安装最新版本内核
+  - `install`：直接安装所选系列的最新内核；未指定系列时默认使用 7.1
   - `help`：显示帮助信息
 - install 命令参数
-  - `-v, --version`：指定要安装的内核版本
+  - `-s, --series, --kernel-series`：选择内核系列（`6.12`、`6.18` 或 `7.1`）
+  - `-v, --version`：指定完整的内核版本；省略系列时会根据版本号自动推断
   - `-a, --no-reboot`：安装后不自动重启
 
 ### 预构建软件包

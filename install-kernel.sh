@@ -16,8 +16,11 @@ trap 'echo "Error on line $LINENO: $BASH_COMMAND"' ERR
 
 # Global variables
 REPO_URL="https://github.com/CloudPassenger/Cloud-Kernel-BBRv3"
-REPO_API="https://api.github.com/repos/CloudPassenger/Cloud-Kernel-BBRv3"
+REPO_API="${REPO_URL/github.com/api.github.com\/repos}"
 DOWNLOAD_DIR="./cloud-kernels"
+SUPPORTED_SERIES=("6.12" "6.18" "7.1")
+DEFAULT_SERIES="7.1"
+KERNEL_SERIES=""
 ARCH=""
 LANGUAGE="zh"  # Default language: Chinese
 SELECTED_TAG=""
@@ -57,8 +60,17 @@ STRINGS[en,detected_arch]="Detected architecture:"
 STRINGS[en,fetching_releases]="Fetching available kernel releases..."
 STRINGS[en,fetch_error]="Error fetching releases. Please check your internet connection and try again."
 STRINGS[en,no_releases]="No releases found in the repository."
+STRINGS[en,no_series_releases]="No releases found for the selected kernel series and architecture:"
+STRINGS[en,select_series]="Select a kernel series:"
 STRINGS[en,select_version]="Select kernel version to install:"
-STRINGS[en,latest_recommended]="Latest version!"
+STRINGS[en,default_series]="default"
+STRINGS[en,latest_recommended]="Latest version in this series!"
+STRINGS[en,using_series]="Using kernel series:"
+STRINGS[en,selected]="Selected:"
+STRINGS[en,unsupported_series]="Error: Unsupported kernel series. Supported series: 6.12, 6.18, 7.1."
+STRINGS[en,invalid_version]="Error: Kernel version must use the full x.y.z format."
+STRINGS[en,version_series_mismatch]="Error: The specified kernel version does not belong to the selected series."
+STRINGS[en,missing_option_value]="Error: Missing value for option:"
 STRINGS[en,downloading]="Downloading kernel packages..."
 STRINGS[en,created_dir]="Created download directory:"
 STRINGS[en,downloading_file]="Downloading:"
@@ -81,7 +93,7 @@ STRINGS[en,build_time]="Build Time"
 STRINGS[en,updating_apt]="Updating APT package list..."
 STRINGS[en,apt_updated]="APT package list updated successfully."
 STRINGS[en,version_not_found]="Error: Specified version not found."
-STRINGS[en,using_auto_version]="Using latest available version instead."
+STRINGS[en,using_auto_version]="Using latest available version in the selected series instead."
 STRINGS[en,help_title]="Cloud Kernel BBRv3 Installer - Help"
 STRINGS[en,help_usage]="Usage:"
 STRINGS[en,help_commands]="Commands:"
@@ -90,11 +102,12 @@ STRINGS[en,help_help]="help       Show this help message"
 STRINGS[en,help_options]="Options:"
 STRINGS[en,help_language]="  -l, --language    Set language (zh/en)"
 STRINGS[en,help_install_options]="Options for 'install' command:"
-STRINGS[en,help_version]="  -v, --version     Specify kernel version"
+STRINGS[en,help_series]="  -s, --series, --kernel-series    Select kernel series (6.12/6.18/7.1; default: 7.1)"
+STRINGS[en,help_version]="  -v, --version     Specify full kernel version (infers series when -s is omitted)"
 STRINGS[en,help_no_reboot]="  -a, --no-reboot   Skip reboot after installation"
 STRINGS[en,help_examples]="Examples:"
-STRINGS[en,help_example1]="  Install latest kernel with English interface:"
-STRINGS[en,help_example2]="  Install specific kernel version without reboot:"
+STRINGS[en,help_example1]="  Install the latest kernel from the 6.18 series with English interface:"
+STRINGS[en,help_example2]="  Install a specific kernel version without reboot:"
 STRINGS[en,auto_install]="Automatic installation mode"
 STRINGS[en,using_version]="Using kernel version:"
 
@@ -113,8 +126,17 @@ STRINGS[zh,detected_arch]="检测到的架构："
 STRINGS[zh,fetching_releases]="正在获取可用的内核版本..."
 STRINGS[zh,fetch_error]="获取版本失败。请检查您的网络连接并重试。"
 STRINGS[zh,no_releases]="在存储库中未找到版本。"
+STRINGS[zh,no_series_releases]="未找到适用于所选内核系列和系统架构的版本："
+STRINGS[zh,select_series]="请选择内核系列："
 STRINGS[zh,select_version]="选择要安装的内核版本："
-STRINGS[zh,latest_recommended]="最新版本！"
+STRINGS[zh,default_series]="默认"
+STRINGS[zh,latest_recommended]="此系列的最新版本！"
+STRINGS[zh,using_series]="使用内核系列："
+STRINGS[zh,selected]="已选择："
+STRINGS[zh,unsupported_series]="错误：不支持的内核系列。支持的系列：6.12、6.18、7.1。"
+STRINGS[zh,invalid_version]="错误：内核版本必须使用完整的 x.y.z 格式。"
+STRINGS[zh,version_series_mismatch]="错误：指定的内核版本不属于所选系列。"
+STRINGS[zh,missing_option_value]="错误：选项缺少参数值："
 STRINGS[zh,downloading]="正在下载内核包..."
 STRINGS[zh,created_dir]="已创建下载目录："
 STRINGS[zh,downloading_file]="正在下载："
@@ -137,7 +159,7 @@ STRINGS[zh,build_time]="构建时间"
 STRINGS[zh,updating_apt]="正在更新 APT 软件源..."
 STRINGS[zh,apt_updated]="APT 软件源更新成功。"
 STRINGS[zh,version_not_found]="错误：未找到指定版本。"
-STRINGS[zh,using_auto_version]="将使用最新可用版本。"
+STRINGS[zh,using_auto_version]="将使用所选系列的最新可用版本。"
 STRINGS[zh,help_title]="Cloud Kernel BBRv3 安装程序 - 帮助"
 STRINGS[zh,help_usage]="用法："
 STRINGS[zh,help_commands]="命令："
@@ -146,10 +168,11 @@ STRINGS[zh,help_help]="help       显示此帮助信息"
 STRINGS[zh,help_options]="选项："
 STRINGS[zh,help_language]="  -l, --language    设置语言 (zh/en)"
 STRINGS[zh,help_install_options]="'install' 命令的选项："
-STRINGS[zh,help_version]="  -v, --version     指定内核版本"
+STRINGS[zh,help_series]="  -s, --series, --kernel-series    选择内核系列 (6.12/6.18/7.1；默认：7.1)"
+STRINGS[zh,help_version]="  -v, --version     指定完整内核版本（未设置 -s 时自动推断系列）"
 STRINGS[zh,help_no_reboot]="  -a, --no-reboot   安装后不重启"
 STRINGS[zh,help_examples]="示例："
-STRINGS[zh,help_example1]="  使用英文界面安装最新内核："
+STRINGS[zh,help_example1]="  使用英文界面安装 6.18 系列的最新内核："
 STRINGS[zh,help_example2]="  安装特定版本内核且不重启："
 STRINGS[zh,auto_install]="自动安装模式"
 STRINGS[zh,using_version]="使用内核版本："
@@ -248,7 +271,7 @@ select_language() {
     echo ""
     
     local choice
-    read -p "Enter choice / 请输入选择 [1-2]: " choice
+    read -r -p "Enter choice / 请输入选择 [1-2]: " choice
     
     case $choice in
         1)
@@ -264,6 +287,76 @@ select_language() {
     
     clear
     print_header "$(get_string welcome)"
+}
+
+# Check whether a kernel series is maintained by this repository
+is_supported_series() {
+    local requested_series="$1"
+    local series
+
+    for series in "${SUPPORTED_SERIES[@]}"; do
+        if [ "$series" = "$requested_series" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Select a maintained kernel series in interactive mode
+select_kernel_series() {
+    print_colored "${PURPLE}" "$(get_string select_series)"
+    echo ""
+
+    local i
+    for i in "${!SUPPORTED_SERIES[@]}"; do
+        if [ "${SUPPORTED_SERIES[$i]}" = "$DEFAULT_SERIES" ]; then
+            echo "$((i + 1))) ${SUPPORTED_SERIES[$i]} ($(get_string default_series))"
+        else
+            echo "$((i + 1))) ${SUPPORTED_SERIES[$i]}"
+        fi
+    done
+
+    echo ""
+    local choice
+    read -r -p "$(get_string enter_choice) [1-${#SUPPORTED_SERIES[@]}]: " choice
+
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#SUPPORTED_SERIES[@]}" ]; then
+        KERNEL_SERIES="${SUPPORTED_SERIES[$((choice - 1))]}"
+    else
+        KERNEL_SERIES="$DEFAULT_SERIES"
+    fi
+
+    print_colored "${GREEN}" "✓ $(get_string using_series) $KERNEL_SERIES"
+}
+
+# Validate and normalize command-line kernel selection options
+validate_kernel_selection() {
+    local version_series=""
+
+    if [ -n "$SPECIFIED_VERSION" ]; then
+        if [[ ! "$SPECIFIED_VERSION" =~ ^([0-9]+\.[0-9]+)\.[0-9]+$ ]]; then
+            print_colored "${RED}" "$(get_string invalid_version) $SPECIFIED_VERSION"
+            exit 1
+        fi
+
+        version_series="${BASH_REMATCH[1]}"
+        if [ -z "$KERNEL_SERIES" ]; then
+            KERNEL_SERIES="$version_series"
+        elif [ "$KERNEL_SERIES" != "$version_series" ]; then
+            print_colored "${RED}" "$(get_string version_series_mismatch) $SPECIFIED_VERSION / $KERNEL_SERIES"
+            exit 1
+        fi
+    fi
+
+    if [ "$COMMAND" = "install" ] && [ -z "$KERNEL_SERIES" ]; then
+        KERNEL_SERIES="$DEFAULT_SERIES"
+    fi
+
+    if [ -n "$KERNEL_SERIES" ] && ! is_supported_series "$KERNEL_SERIES"; then
+        print_colored "${RED}" "$(get_string unsupported_series)"
+        exit 1
+    fi
 }
 
 # Check if system is Debian-based and version requirements
@@ -313,7 +406,8 @@ check_system() {
 check_arch() {
     print_colored "${CYAN}" "$(get_string architecture_check)"
     
-    local machine=$(uname -m)
+    local machine
+    machine=$(uname -m)
     
     case "$machine" in
         x86_64|amd64)
@@ -335,112 +429,125 @@ check_arch() {
 # Fetch available releases from GitHub
 fetch_releases() {
     print_colored "${CYAN}" "$(get_string fetching_releases)"
-    
+    print_colored "${CYAN}" "$(get_string using_series) $KERNEL_SERIES"
+
     # Install curl and jq if not installed
     install_dependency "curl"
     install_dependency "jq"
-    
-    # Get releases
+
+    # Get up to 100 releases so older maintained series remain selectable
     local releases_json
-    releases_json=$(curl -s "${REPO_API}/releases")
-    
-    if [ $? -ne 0 ] || [ -z "$releases_json" ]; then
+    if ! releases_json=$(curl -fsSL "${REPO_API}/releases?per_page=100"); then
         print_colored "${RED}" "$(get_string fetch_error)"
         exit 1
     fi
-    
+
+    if [ -z "$releases_json" ]; then
+        print_colored "${RED}" "$(get_string fetch_error)"
+        exit 1
+    fi
+
     # Extract tags and published times using jq
     local releases_info
     releases_info=$(echo "$releases_json" | jq -r '.[] | "\(.tag_name)|\(.published_at)"')
-    
-    if [ -z "$releases_info" ] || [ "$releases_info" == "null" ]; then
+
+    if [ -z "$releases_info" ] || [ "$releases_info" = "null" ]; then
         print_colored "${RED}" "$(get_string no_releases)"
         exit 1
     fi
-    
-    # Filter releases based on architecture
+
+    # Filter releases by the selected series and system architecture
     local filtered_releases=()
-    
+    local series_pattern="${KERNEL_SERIES//./\\.}"
+    local release_line tag base_tag published_time
+
     while IFS= read -r release_line; do
-        local tag=$(echo "$release_line" | cut -d'|' -f1)
-        local published_time=$(echo "$release_line" | cut -d'|' -f2 | sed 's/T/ /g' | sed 's/Z$//')
-        
-        if [ "$ARCH" = "amd64" ] && ! [[ "$tag" == *"-arm64" ]]; then
+        tag="${release_line%%|*}"
+        published_time="${release_line#*|}"
+        published_time="${published_time/T/ }"
+        published_time="${published_time%Z}"
+        base_tag="${tag%-arm64}"
+
+        if [[ ! "$base_tag" =~ ^${series_pattern}\.[0-9]+$ ]]; then
+            continue
+        fi
+
+        if [ "$ARCH" = "amd64" ] && [[ "$tag" != *"-arm64" ]]; then
             filtered_releases+=("$tag|$published_time")
-        elif [ "$ARCH" = "arm64" ] && [[ "$tag" == *"-arm64" ]]; then
+        elif [ "$ARCH" = "arm64" ] && [[ "$tag" = *"-arm64" ]]; then
             filtered_releases+=("$tag|$published_time")
         fi
     done <<< "$releases_info"
-    
-    # If a specific version was requested
+
+    if [ "${#filtered_releases[@]}" -eq 0 ]; then
+        print_colored "${RED}" "$(get_string no_series_releases) $KERNEL_SERIES / $ARCH"
+        exit 1
+    fi
+
+    # Use a requested full version from the selected series
     if [ -n "$SPECIFIED_VERSION" ]; then
-        local version_tag=""
-        
-        if [ "$ARCH" = "amd64" ]; then
-            version_tag="$SPECIFIED_VERSION"
-        elif [ "$ARCH" = "arm64" ]; then
+        local version_tag="$SPECIFIED_VERSION"
+        local release found=false
+
+        if [ "$ARCH" = "arm64" ]; then
             version_tag="${SPECIFIED_VERSION}-arm64"
         fi
-        
-        local found=false
-        
+
         for release in "${filtered_releases[@]}"; do
-            local tag=$(echo "$release" | cut -d'|' -f1)
+            tag="${release%%|*}"
             if [ "$tag" = "$version_tag" ]; then
                 SELECTED_TAG="$tag"
                 found=true
                 break
             fi
         done
-        
+
         if [ "$found" = false ]; then
             print_colored "${YELLOW}" "$(get_string version_not_found) $version_tag"
             print_colored "${YELLOW}" "$(get_string using_auto_version)"
-            SELECTED_TAG=$(echo "${filtered_releases[0]}" | cut -d'|' -f1)
+            SELECTED_TAG="${filtered_releases[0]%%|*}"
         fi
-        
+
         print_colored "${GREEN}" "✓ $(get_string using_version) $SELECTED_TAG"
         return
     fi
-    
-    # If automatic installation was selected
+
+    # Automatic mode installs the latest release within the selected series
     if [ "$COMMAND" = "install" ]; then
-        SELECTED_TAG=$(echo "${filtered_releases[0]}" | cut -d'|' -f1)
+        SELECTED_TAG="${filtered_releases[0]%%|*}"
         print_colored "${GREEN}" "✓ $(get_string auto_install): $SELECTED_TAG"
         return
     fi
-    
-    # Display menu for tag selection
+
+    # Display the versions available within the selected series
     print_colored "${YELLOW}" "$(get_string select_version)"
     echo ""
-    
-    local i=0
+
+    local i=0 release build_time
     for release in "${filtered_releases[@]}"; do
-        local tag=$(echo "$release" | cut -d'|' -f1)
-        local build_time=$(echo "$release" | cut -d'|' -f2)
-        
+        tag="${release%%|*}"
+        build_time="${release#*|}"
+
         if [ "$i" -eq 0 ]; then
             print_colored "${GREEN}" "$i) ${tag} - $(get_string build_time): ${build_time} ($(get_string latest_recommended))"
         else
             echo "$i) ${tag} - $(get_string build_time): ${build_time}"
         fi
-        
+
         ((i++))
     done
-    
+
     echo ""
-    echo -n "$(get_string enter_choice) [0-$((i-1))]: "
     local choice
-    read choice
-    
-    # Set selected tag
-    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 0 ] && [ "$choice" -lt ${#filtered_releases[@]} ]; then
-        SELECTED_TAG=$(echo "${filtered_releases[$choice]}" | cut -d'|' -f1)
+    read -r -p "$(get_string enter_choice) [0-$((i - 1))]: " choice
+
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 0 ] && [ "$choice" -lt "${#filtered_releases[@]}" ]; then
+        SELECTED_TAG="${filtered_releases[$choice]%%|*}"
     else
-        SELECTED_TAG=$(echo "${filtered_releases[0]}" | cut -d'|' -f1)
+        SELECTED_TAG="${filtered_releases[0]%%|*}"
     fi
-    
-    print_colored "${GREEN}" "✓ Selected: $SELECTED_TAG"
+
+    print_colored "${GREEN}" "✓ $(get_string selected) $SELECTED_TAG"
 }
 
 # Download kernel packages
@@ -462,11 +569,11 @@ download_packages() {
     
     # Download packages
     while IFS= read -r deb_url; do
-        local filename=$(basename "$deb_url")
+        local filename
+        filename=$(basename "$deb_url")
         print_colored "${CYAN}" "$(get_string downloading_file) $filename"
-        curl -L "$deb_url" -o "${DOWNLOAD_DIR}/${filename}" --progress-bar
-        
-        if [ $? -ne 0 ]; then
+
+        if ! curl -L "$deb_url" -o "${DOWNLOAD_DIR}/${filename}" --progress-bar; then
             print_colored "${RED}" "$(get_string download_failed)"
             exit 1
         fi
@@ -479,42 +586,41 @@ download_packages() {
 install_packages() {
     print_header "$(get_string installing)"
     
-    local install_cmd="dpkg -i"
+    local install_cmd=(dpkg -i)
     if [ "$(id -u)" -ne 0 ]; then
-        install_cmd="sudo dpkg -i"
+        install_cmd=(sudo dpkg -i)
     fi
-    
+
+    local deb
+
     # First install headers
-    local headers=($(find "$DOWNLOAD_DIR" -name "linux-headers*.deb"))
+    local headers=()
+    mapfile -t headers < <(find "$DOWNLOAD_DIR" -name "linux-headers*.deb")
     for deb in "${headers[@]}"; do
         print_colored "${CYAN}" "Installing: $(basename "$deb")"
-        $install_cmd "$deb"
-        
-        if [ $? -ne 0 ]; then
+        if ! "${install_cmd[@]}" "$deb"; then
             print_colored "${RED}" "$(get_string install_failed)"
             exit 1
         fi
     done
-    
+
     # Then install libc-dev
-    local libc_dev=($(find "$DOWNLOAD_DIR" -name "linux-libc-dev*.deb"))
+    local libc_dev=()
+    mapfile -t libc_dev < <(find "$DOWNLOAD_DIR" -name "linux-libc-dev*.deb")
     for deb in "${libc_dev[@]}"; do
         print_colored "${CYAN}" "Installing: $(basename "$deb")"
-        $install_cmd "$deb"
-        
-        if [ $? -ne 0 ]; then
+        if ! "${install_cmd[@]}" "$deb"; then
             print_colored "${RED}" "$(get_string install_failed)"
             exit 1
         fi
     done
-    
+
     # Finally install image
-    local images=($(find "$DOWNLOAD_DIR" -name "linux-image*.deb"))
+    local images=()
+    mapfile -t images < <(find "$DOWNLOAD_DIR" -name "linux-image*.deb")
     for deb in "${images[@]}"; do
         print_colored "${CYAN}" "Installing: $(basename "$deb")"
-        $install_cmd "$deb"
-        
-        if [ $? -ne 0 ]; then
+        if ! "${install_cmd[@]}" "$deb"; then
             print_colored "${RED}" "$(get_string install_failed)"
             exit 1
         fi
@@ -531,7 +637,7 @@ install_packages() {
     # Ask for reboot if not in automatic mode
     if [ "$COMMAND" != "install" ]; then
         local reboot_choice
-        read -p "$(get_string reboot_prompt)" reboot_choice
+        read -r -p "$(get_string reboot_prompt)" reboot_choice
         if [[ "$reboot_choice" =~ ^[Yy]$ ]]; then
             print_colored "${YELLOW}" "$(get_string rebooting)"
             if [ "$(id -u)" -eq 0 ]; then
@@ -556,33 +662,34 @@ install_packages() {
 # Show help message
 show_help() {
     print_header "$(get_string help_title)"
-    
-    echo "$(get_string help_usage)"
+
+    get_string help_usage
     echo "  $0 [options] [command]"
     echo ""
-    
-    echo "$(get_string help_commands)"
+
+    get_string help_commands
     echo "  $(get_string help_install)"
     echo "  $(get_string help_help)"
     echo ""
-    
-    echo "$(get_string help_options)"
-    echo "$(get_string help_language)"
+
+    get_string help_options
+    get_string help_language
     echo ""
-    
-    echo "$(get_string help_install_options)"
-    echo "$(get_string help_version)"
-    echo "$(get_string help_no_reboot)"
+
+    get_string help_install_options
+    get_string help_series
+    get_string help_version
+    get_string help_no_reboot
     echo ""
-    
-    echo "$(get_string help_examples)"
-    echo "$(get_string help_example1)"
-    echo "  $0 -l en install"
+
+    get_string help_examples
+    get_string help_example1
+    echo "  $0 -l en install --series 6.18"
     echo ""
-    echo "$(get_string help_example2)"
-    echo "  $0 install -v 6.12.21 -a"
+    get_string help_example2
+    echo "  $0 install --series 6.12 --version 6.12.21 --no-reboot"
     echo ""
-    
+
     exit 0
 }
 
@@ -590,23 +697,25 @@ show_help() {
 parse_args() {
     local current_arg=""
     local i=1
-    
-    while [ $i -le $# ]; do
+
+    while [ "$i" -le "$#" ]; do
         current_arg="${!i}"
-        
+
         case "$current_arg" in
             -l|--language)
-                i=$((i+1))
-                if [ $i -le $# ]; then
-                    case "${!i}" in
-                        zh|en)
-                            LANGUAGE="${!i}"
-                            ;;
-                        *)
-                            LANGUAGE="zh"
-                            ;;
-                    esac
+                i=$((i + 1))
+                if [ "$i" -gt "$#" ]; then
+                    print_colored "${RED}" "$(get_string missing_option_value) $current_arg"
+                    exit 1
                 fi
+                case "${!i}" in
+                    zh|en)
+                        LANGUAGE="${!i}"
+                        ;;
+                    *)
+                        LANGUAGE="zh"
+                        ;;
+                esac
                 ;;
             install)
                 COMMAND="install"
@@ -614,27 +723,36 @@ parse_args() {
             help)
                 COMMAND="help"
                 ;;
-            -v|--version)
-                if [ "$COMMAND" = "install" ]; then
-                    i=$((i+1))
-                    if [ $i -le $# ]; then
-                        SPECIFIED_VERSION="${!i}"
-                    fi
+            -s|--series|--kernel-series)
+                i=$((i + 1))
+                if [ "$i" -gt "$#" ]; then
+                    print_colored "${RED}" "$(get_string missing_option_value) $current_arg"
+                    exit 1
                 fi
+                KERNEL_SERIES="${!i}"
+                ;;
+            -v|--version)
+                i=$((i + 1))
+                if [ "$i" -gt "$#" ]; then
+                    print_colored "${RED}" "$(get_string missing_option_value) $current_arg"
+                    exit 1
+                fi
+                SPECIFIED_VERSION="${!i}"
                 ;;
             -a|--no-reboot)
-                if [ "$COMMAND" = "install" ]; then
-                    AUTO_REBOOT=false
-                fi
+                AUTO_REBOOT=false
                 ;;
         esac
-        
-        i=$((i+1))
+
+        i=$((i + 1))
     done
-    
-    # Default to help if no command specified
+
     if [ -z "$COMMAND" ]; then
         COMMAND="interactive"
+    fi
+
+    if [ "$COMMAND" != "help" ]; then
+        validate_kernel_selection
     fi
 }
 
@@ -645,39 +763,46 @@ parse_args() {
 main() {
     # Parse command line arguments
     parse_args "$@"
-    
+
     # Show help if requested
     if [ "$COMMAND" = "help" ]; then
         show_help
     fi
-    
+
     # Check for root privileges
     check_root
-    
+
     # Update apt
     update_apt
-    
-    # Interactive mode - select language
+
+    # Interactive mode selects language and kernel series
     if [ "$COMMAND" = "interactive" ]; then
         select_language
+        if [ -z "$KERNEL_SERIES" ]; then
+            select_kernel_series
+        else
+            print_colored "${GREEN}" "✓ $(get_string using_series) $KERNEL_SERIES"
+        fi
     fi
-    
+
     # Display header
     print_header "$(get_string welcome)"
-    
+
     # Check system compatibility
     check_system
     check_arch
-    
+
     # Fetch and select release
     fetch_releases
-    
+
     # Download packages
     download_packages
-    
+
     # Install packages
     install_packages
 }
 
-# Run the main function with all arguments
-main "$@" 
+# Run main only when the script is executed directly
+if [[ "${BASH_SOURCE[0]}" = "$0" ]]; then
+    main "$@"
+fi

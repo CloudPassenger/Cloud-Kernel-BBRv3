@@ -35,7 +35,7 @@ This repository provides automated daily builds of Debian kernel packages with e
 
 ### One-click Installation Script
 
-Use our one-click installation script to quickly install the latest or a specific kernel version:
+Use the one-click installer to install the latest kernel within a selected series or an exact full version:
 
 ```bash
 # Download the installation script
@@ -45,24 +45,25 @@ chmod +x install-kernel.sh
 # Interactive installation (recommended for new users)
 ./install-kernel.sh
 
-# Automatic installation of the latest kernel
+# Automatically install the latest kernel from the default 7.1 series
 ./install-kernel.sh install
 
-# Specify language (zh for Chinese or en for English)
-./install-kernel.sh -l en install
+# Install the latest kernel from the 6.18 series with an English interface
+./install-kernel.sh -l en install --series 6.18
 
-# Install a specific kernel version and skip reboot
-./install-kernel.sh install -v 6.12.21 -a
+# Install an exact version without rebooting (the series is inferred when omitted)
+./install-kernel.sh install --version 6.12.21 --no-reboot
 ```
 
 Script parameters:
 - Global options
   - `-l, --language`: Set language (zh/en), defaults to Chinese
 - Commands
-  - `install`: Directly install the latest kernel
+  - `install`: Directly install the latest kernel in the selected series; defaults to 7.1
   - `help`: Display help information
 - Install command options
-  - `-v, --version`: Specify kernel version to install
+  - `-s, --series, --kernel-series`: Select a kernel series (`6.12`, `6.18`, or `7.1`)
+  - `-v, --version`: Specify a full kernel version; the series is inferred when omitted
   - `-a, --no-reboot`: Skip reboot after installation
 
 ### Pre-built Packages
