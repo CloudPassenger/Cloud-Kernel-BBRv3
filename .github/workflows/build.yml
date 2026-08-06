@@ -1,8 +1,8 @@
-name: Build Debian Kernel (x86_64)
+name: Build Debian Kernel
 
 on:
   repository_dispatch:
-    types: [trigger-x86_64-build]
+    types: [trigger-x86_64-build, trigger-arm64-build]
   workflow_dispatch:
     inputs:
       kernel_version:
@@ -10,6 +10,14 @@ on:
         required: true
         default: "6.12.30"
         type: string
+      arch:
+        description: "Target architecture"
+        required: true
+        default: "x86_64"
+        type: choice
+        options:
+          - x86_64
+          - arm64
       skip_cache:
         description: "Skip Cache"
         required: false
@@ -25,37 +33,71 @@ jobs:
       kernel_minor_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_MINOR_VERSION }}
       kernel_major_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_MAJOR_VERSION }}
       skip_cache: ${{ steps.prepare_build_parameters.outputs.SKIP_CACHE }}
+      arch: ${{ steps.prepare_build_parameters.outputs.ARCH }}
+      debian_arch: ${{ steps.prepare_build_parameters.outputs.DEBIAN_ARCH }}
+      runner: ${{ steps.prepare_build_parameters.outputs.RUNNER }}
+      tag_suffix: ${{ steps.prepare_build_parameters.outputs.TAG_SUFFIX }}
     steps:
       - name: Prepare Build Parameters
         id: prepare_build_parameters
         run: |
           if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
             KERNEL_VERSION="${{ github.event.client_payload.kernel_version }}"
-            KERNEL_MINOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 2)
-            KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
+            case "${{ github.event.action }}" in
+              trigger-x86_64-build) ARCH=x86_64 ;;
+              trigger-arm64-build) ARCH=arm64 ;;
+              *)
+                echo "❌ Unknown repository_dispatch event type: ${{ github.event.action }}"
+                exit 1
+                ;;
+            esac
             SKIP_CACHE=false
           else
             KERNEL_VERSION="${{ inputs.kernel_version }}"
-            KERNEL_MINOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 2)
-            KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
+            ARCH="${{ inputs.arch }}"
             SKIP_CACHE="${{ inputs.skip_cache }}" || SKIP_CACHE=false
           fi
+          KERNEL_MINOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 2)
+          KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
           if [ -z "$KERNEL_VERSION" ]; then
             echo "❌ Failed to get kernel version"
             exit 1
           fi
+          case "$ARCH" in
+            x86_64)
+              DEBIAN_ARCH=amd64
+              RUNNER=ubuntu-24.04
+              TAG_SUFFIX=""
+              ;;
+            arm64)
+              DEBIAN_ARCH=arm64
+              RUNNER=ubuntu-24.04-arm
+              TAG_SUFFIX="-arm64"
+              ;;
+            *)
+              echo "❌ Unsupported architecture: $ARCH"
+              exit 1
+              ;;
+          esac
           echo "✅ Using kernel version: $KERNEL_VERSION"
           echo "✅ Using kernel minor version: $KERNEL_MINOR_VERSION"
           echo "✅ Using kernel major version: $KERNEL_MAJOR_VERSION"
+          echo "✅ Using architecture: $ARCH (debianarch: $DEBIAN_ARCH, runner: $RUNNER)"
           echo "✅ Using skip cache: $SKIP_CACHE"
-          echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_OUTPUT
-          echo "KERNEL_MINOR_VERSION=$KERNEL_MINOR_VERSION" >> $GITHUB_OUTPUT
-          echo "KERNEL_MAJOR_VERSION=$KERNEL_MAJOR_VERSION" >> $GITHUB_OUTPUT
-          echo "SKIP_CACHE=$SKIP_CACHE" >> $GITHUB_OUTPUT
+          {
+            echo "KERNEL_VERSION=$KERNEL_VERSION"
+            echo "KERNEL_MINOR_VERSION=$KERNEL_MINOR_VERSION"
+            echo "KERNEL_MAJOR_VERSION=$KERNEL_MAJOR_VERSION"
+            echo "SKIP_CACHE=$SKIP_CACHE"
+            echo "ARCH=$ARCH"
+            echo "DEBIAN_ARCH=$DEBIAN_ARCH"
+            echo "RUNNER=$RUNNER"
+            echo "TAG_SUFFIX=$TAG_SUFFIX"
+          } >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build Debian Kernel Package for x86_64
-    runs-on: ubuntu-24.04
+    name: Build Debian Kernel Package for ${{ needs.prepare.outputs.arch }}
+    runs-on: ${{ needs.prepare.outputs.runner }}
     needs: prepare
     outputs:
       kernel_version: ${{ needs.prepare.outputs.kernel_version }}
@@ -114,15 +156,15 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-amd64
+          key: linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-${{ needs.prepare.outputs.debian_arch }}
       - name: Configure Kernel Build
         run: |
           echo "⌛ Configuring Kernel Build..."
           cd linux
-          bash ../.github/scripts/apply_config.sh "${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" x86_64
-          echo "⭕ Merged Debian cloud-amd64 base config with custom overrides"
+          bash ../.github/scripts/apply_config.sh "${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" ${{ needs.prepare.outputs.arch }}
+          echo "⭕ Merged Debian cloud-${{ needs.prepare.outputs.debian_arch }} base config with custom overrides"
           make CC="ccache gcc" HOSTCC="ccache gcc" olddefconfig
-          echo "✅ Final Kernel Build Configured for x86_64"
+          echo "✅ Final Kernel Build Configured for ${{ needs.prepare.outputs.arch }}"
       - name: Build Kernel (Debian Package)
         env:
           KBUILD_BUILD_USER: "cloudpassenger"
@@ -130,16 +172,16 @@ jobs:
           KBUILD_BUILD_TIMESTAMP: ""
           KDEB_COMPRESS: "xz"
         run: |
-          echo "⌛ Start Building Kernel (Debian Package) for x86_64..."
+          echo "⌛ Start Building Kernel (Debian Package) for ${{ needs.prepare.outputs.arch }}..."
           cd linux
           make -j $(nproc) CC="ccache gcc" HOSTCC="ccache gcc" bindeb-pkg
           echo "✅ Kernel (Debian Package) Built Successfully"
-          cp .config ../linux-${{ needs.prepare.outputs.kernel_version }}-amd64.config
+          cp .config ../linux-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.debian_arch }}.config
           echo "✅ Copied Kernel Config"
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-x86_64
+          name: kernel-${{ needs.prepare.outputs.arch }}
           path: |
             *.deb
             *.changes
@@ -152,16 +194,16 @@ jobs:
           echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" >> $GITHUB_OUTPUT
           echo "BUILD_TIME=$BUILD_TIMESTAMP"
           echo "🏷️ Build Time: $BUILD_TIMESTAMP"
-  
+
   create-release:
     name: Create Release
     needs: [prepare, build]
     runs-on: ubuntu-24.04
     steps:
-      - name: Download Artifacts for x86_64
+      - name: Download Artifacts for ${{ needs.prepare.outputs.arch }}
         uses: actions/download-artifact@v4
         with:
-          name: kernel-x86_64
+          name: kernel-${{ needs.prepare.outputs.arch }}
           path: ./
       - name: Remove Debug Package in Release
         run: |
@@ -171,15 +213,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.prepare.outputs.kernel_version }}
-          name: Debian Cloud Kernel ${{ needs.prepare.outputs.kernel_version }} with BBR3 (amd64)
+          tag_name: ${{ needs.prepare.outputs.kernel_version }}${{ needs.prepare.outputs.tag_suffix }}
+          name: Debian Cloud Kernel ${{ needs.prepare.outputs.kernel_version }} with BBR3 (${{ needs.prepare.outputs.debian_arch }})
           body: |
             🚀 **Kernel Version:** `${{ needs.prepare.outputs.kernel_version }}`
 
             📅 **Build Time:** `${{ needs.build.outputs.build_time }}`
 
             🛠️ **Build Information:**
-            - **Architecture:** `amd64`
+            - **Architecture:** `${{ needs.prepare.outputs.debian_arch }}`
             - **Kernel Type:** `cloud`
             - **Applied Patches:**
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
@@ -194,7 +236,7 @@ jobs:
             📅 **构建时间:** `${{ needs.build.outputs.build_time }}`
 
             🛠️ **构建信息:**
-            - **架构:** `amd64`
+            - **架构:** `${{ needs.prepare.outputs.debian_arch }}`
             - **内核类型:** `cloud`
             - **应用补丁:**
               - `Debian 补丁集合` (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
@@ -206,4 +248,3 @@ jobs:
             *.changes
             *.buildinfo
             *.config
-        
