@@ -117,7 +117,7 @@ jobs:
       - name: Download Linux Kernel Source
         run: |
           echo "⌛ Downloading Linux Kernel Source Code for ${{ needs.prepare.outputs.kernel_version }}..."
-          wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${{ needs.prepare.outputs.kernel_version }}.tar.xz
+          wget https://cdn.kernel.org/pub/linux/kernel/v${{ needs.prepare.outputs.kernel_major_version }}.x/linux-${{ needs.prepare.outputs.kernel_version }}.tar.xz
           tar -xf linux-${{ needs.prepare.outputs.kernel_version }}.tar.xz
           rm linux-${{ needs.prepare.outputs.kernel_version }}.tar.xz
           mv linux-${{ needs.prepare.outputs.kernel_version }} linux
@@ -131,6 +131,14 @@ jobs:
         run: |
           echo "⌛ Downloading Xanmod Patches..."
           git clone --depth=1 https://gitlab.com/xanmod/linux-patches.git linux-xanmod-patches
+          XANMOD_FIX_DIR="xanmod_patch_fixes/${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}"
+          if [ -d "$XANMOD_FIX_DIR" ]; then
+            for fix_patch in "$XANMOD_FIX_DIR"/*.patch; do
+              [ -e "$fix_patch" ] || continue
+              echo "⭕ Applying local Xanmod patch fix: $fix_patch"
+              patch -d linux-xanmod-patches -p1 < "$fix_patch"
+            done
+          fi
           echo "✅ Downloaded Xanmod Patches"
       - name: Organize Patches
         run: |
@@ -138,7 +146,15 @@ jobs:
           cd linux
           cp -R ../linux-debian/debian/patches ./patches
           echo "⭕ Copied Debian Patches"
-          cp -R ../linux-xanmod-patches/eol/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}.y-xanmod/net ./patches/net
+          XANMOD_NET_DIR="../linux-xanmod-patches/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}.y-xanmod/net"
+          if [ ! -d "$XANMOD_NET_DIR" ]; then
+            XANMOD_NET_DIR="../linux-xanmod-patches/eol/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}.y-xanmod/net"
+          fi
+          if [ ! -d "$XANMOD_NET_DIR" ]; then
+            echo "❌ Xanmod net patch directory not found for ${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}"
+            exit 1
+          fi
+          cp -R "$XANMOD_NET_DIR" ./patches/net
           echo "⭕ Copied Xanmod Net Patches"
           cp -R ../kernel_patches/${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }} ./patches/custom
           cd patches

@@ -1,4 +1,4 @@
-name: Check Kernel Version Updates (6.12 LTS)
+name: Check Kernel Version Updates
 
 on:
   schedule:
@@ -7,28 +7,45 @@ on:
 
 jobs:
   check-kernel-versions:
-    name: Check Kernel Versions
+    name: Check Kernel Versions (${{ matrix.series }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        series: ["6.12", "6.18", "7.1"]
     steps:
       - name: Checkout Workflow Source Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
-          
+
+      - name: Check Series Is Ready
+        id: check_series_ready
+        run: |
+          if [ -d "kernel_patches/${{ matrix.series }}" ] && [ -d "custom_configs/${{ matrix.series }}" ]; then
+            echo "READY=true" >> $GITHUB_OUTPUT
+          else
+            echo "⏭️ Skipping ${{ matrix.series }}: kernel_patches/custom_configs not prepared yet"
+            echo "READY=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Get Latest Kernel Version
         id: get_kernel_version
+        if: steps.check_series_ready.outputs.READY == 'true'
         run: |
-          kernel_version=$(git ls-remote -t https://salsa.debian.org/kernel-team/linux.git 'refs/tags/debian/6.12*' | grep -oP '6\.12\.\d+' | sort -V | tail -n 1)
+          series_regex=$(printf '%s' "${{ matrix.series }}" | sed 's/\./\\./g')
+          kernel_version=$(git ls-remote -t https://salsa.debian.org/kernel-team/linux.git "refs/tags/debian/${{ matrix.series }}.*-1" | grep -oP "${series_regex}\.\d+" | sort -V | tail -n 1)
           if [ -z "$kernel_version" ]; then
-            echo "❌ Failed to get kernel version for 6.12 LTS, please check the kernel version is correct."
+            echo "❌ Failed to get kernel version for ${{ matrix.series }}, please check the kernel version is correct."
             exit 1
           fi
           echo "✅ Latest Debian kernel version: $kernel_version"
           echo "KERNEL_VERSION=$kernel_version" >> $GITHUB_OUTPUT
-          
+
       - name: Check x86_64 Build Status
         id: check_x86_64
+        if: steps.check_series_ready.outputs.READY == 'true'
         run: |
           echo "🔍 Looking for tag: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
           TAG_EXISTS=$(git tag --list | grep -x "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}" || echo "")
@@ -39,9 +56,10 @@ jobs:
             echo "🔄 x86_64 build needed for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
             echo "BUILD_NEEDED=true" >> $GITHUB_OUTPUT
           fi
-          
+
       - name: Check arm64 Build Status
         id: check_arm64
+        if: steps.check_series_ready.outputs.READY == 'true'
         run: |
           echo "🔍 Looking for tag: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}-arm64"
           TAG_EXISTS=$(git tag --list | grep -x "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}-arm64" || echo "")
@@ -52,7 +70,7 @@ jobs:
             echo "🔄 arm64 build needed for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
             echo "BUILD_NEEDED=true" >> $GITHUB_OUTPUT
           fi
-          
+
       - name: Trigger x86_64 Build Workflow if needed
         if: steps.check_x86_64.outputs.BUILD_NEEDED == 'true'
         uses: peter-evans/repository-dispatch@v3
@@ -60,7 +78,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-x86_64-build
           client-payload: '{"kernel_version": "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"}'
-          
+
       - name: Trigger arm64 Build Workflow if needed
         if: steps.check_arm64.outputs.BUILD_NEEDED == 'true'
         uses: peter-evans/repository-dispatch@v3
@@ -68,10 +86,11 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-arm64-build
           client-payload: '{"kernel_version": "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"}'
-          
+
       - name: Summary
+        if: steps.check_series_ready.outputs.READY == 'true'
         run: |
-          echo "## Kernel Version Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "## Kernel Version Check Results (${{ matrix.series }})" >> $GITHUB_STEP_SUMMARY
           echo "- 📦 Kernel Version: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "- 🔄 x86_64 Build Needed: ${{ steps.check_x86_64.outputs.BUILD_NEEDED }}" >> $GITHUB_STEP_SUMMARY
           echo "- 🔄 arm64 Build Needed: ${{ steps.check_arm64.outputs.BUILD_NEEDED }}" >> $GITHUB_STEP_SUMMARY

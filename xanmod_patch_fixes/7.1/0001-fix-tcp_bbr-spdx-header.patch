@@ -1,0 +1,11 @@
+--- a/linux-7.1.y-xanmod/net/tcp/0001-tcp_bbr-v3-update-TCP-bbr-congestion-control-module-.patch
++++ b/linux-7.1.y-xanmod/net/tcp/0001-tcp_bbr-v3-update-TCP-bbr-congestion-control-module-.patch
+@@ -404,7 +404,7 @@
+ --- a/net/ipv4/tcp_bbr.c
+ +++ b/net/ipv4/tcp_bbr.c
+ @@ -1,19 +1,20 @@
+- // SPDX-License-Identifier: GPL-2.0
++ // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+ -/* Bottleneck Bandwidth and RTT (BBR) congestion control
+ +/* BBR (Bottleneck Bandwidth and RTT) congestion control
+   *
