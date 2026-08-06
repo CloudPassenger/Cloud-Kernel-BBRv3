@@ -119,7 +119,7 @@ jobs:
         run: |
           echo "⌛ Configuring Kernel Build..."
           cd linux
-          bash ../configs/arm64_apply.sh
+          bash ../.github/scripts/apply_config.sh "${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" arm64
           echo "⭕ Merged Debian cloud-arm64 base config with custom overrides"
           make CC="ccache gcc" HOSTCC="ccache gcc" olddefconfig
           echo "✅ Final Kernel Build Configured for arm64"
