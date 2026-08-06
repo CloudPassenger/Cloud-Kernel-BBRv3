@@ -119,8 +119,8 @@ jobs:
         run: |
           echo "⌛ Configuring Kernel Build..."
           cd linux
-          cp ../configs/x86_64.config .config
-          echo "⭕ Copied Pre-Configured .config from x86_64"
+          bash ../configs/x86_64_apply.sh
+          echo "⭕ Merged Debian cloud-amd64 base config with custom overrides"
           make CC="ccache gcc" HOSTCC="ccache gcc" olddefconfig
           echo "✅ Final Kernel Build Configured for x86_64"
       - name: Build Kernel (Debian Package)
