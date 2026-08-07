@@ -23,6 +23,11 @@ on:
         required: false
         default: false
         type: boolean
+      diagnostic_build:
+        description: "Enable verbose build diagnostics"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   prepare:
@@ -33,6 +38,7 @@ jobs:
       kernel_minor_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_MINOR_VERSION }}
       kernel_major_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_MAJOR_VERSION }}
       skip_cache: ${{ steps.prepare_build_parameters.outputs.SKIP_CACHE }}
+      diagnostic_build: ${{ steps.prepare_build_parameters.outputs.DIAGNOSTIC_BUILD }}
       arch: ${{ steps.prepare_build_parameters.outputs.ARCH }}
       debian_arch: ${{ steps.prepare_build_parameters.outputs.DEBIAN_ARCH }}
       runner: ${{ steps.prepare_build_parameters.outputs.RUNNER }}
@@ -52,11 +58,23 @@ jobs:
                 ;;
             esac
             SKIP_CACHE=false
+            DIAGNOSTIC_BUILD="${{ github.event.client_payload.diagnostic_build }}"
+            if [ "$DIAGNOSTIC_BUILD" != "true" ]; then
+              DIAGNOSTIC_BUILD=false
+            fi
           else
             KERNEL_VERSION="${{ inputs.kernel_version }}"
             ARCH="${{ inputs.arch }}"
-            SKIP_CACHE="${{ inputs.skip_cache }}" || SKIP_CACHE=false
+            SKIP_CACHE="${{ inputs.skip_cache }}"
+            DIAGNOSTIC_BUILD="${{ inputs.diagnostic_build }}"
           fi
+          case "$DIAGNOSTIC_BUILD" in
+            true|false) ;;
+            *)
+              echo "❌ Invalid diagnostic build value: $DIAGNOSTIC_BUILD"
+              exit 1
+              ;;
+          esac
           KERNEL_MINOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 2)
           KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
           if [ -z "$KERNEL_VERSION" ]; then
@@ -84,11 +102,13 @@ jobs:
           echo "✅ Using kernel major version: $KERNEL_MAJOR_VERSION"
           echo "✅ Using architecture: $ARCH (debianarch: $DEBIAN_ARCH, runner: $RUNNER)"
           echo "✅ Using skip cache: $SKIP_CACHE"
+          echo "✅ Using diagnostic build: $DIAGNOSTIC_BUILD"
           {
             echo "KERNEL_VERSION=$KERNEL_VERSION"
             echo "KERNEL_MINOR_VERSION=$KERNEL_MINOR_VERSION"
             echo "KERNEL_MAJOR_VERSION=$KERNEL_MAJOR_VERSION"
             echo "SKIP_CACHE=$SKIP_CACHE"
+            echo "DIAGNOSTIC_BUILD=$DIAGNOSTIC_BUILD"
             echo "ARCH=$ARCH"
             echo "DEBIAN_ARCH=$DEBIAN_ARCH"
             echo "RUNNER=$RUNNER"
@@ -106,9 +126,20 @@ jobs:
       - name: Update and install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential curl git patch jq openssl quilt \
-            libncurses-dev libssl-dev libelf-dev libdw-dev libudev-dev libpci-dev libcap-dev libpcre2-dev libcurl4-openssl-dev \
-            bison bc flex rsync debhelper lz4 pahole zstd dpkg-dev fakeroot kmod cpio xz-utils
+          sudo apt-get install -y build-essential cmake curl git patch jq openssl pkg-config quilt \
+            libncurses-dev libssl-dev libelf-dev libdw-dev zlib1g-dev libudev-dev libpci-dev libcap-dev libpcre2-dev libcurl4-openssl-dev \
+            bison bc flex rsync debhelper lz4 zstd dpkg-dev fakeroot kmod cpio xz-utils
+      - name: Build and install pahole
+        run: |
+          git clone --branch v1.31 --depth=1 --recurse-submodules https://github.com/acmel/dwarves.git "$RUNNER_TEMP/dwarves"
+          cmake -S "$RUNNER_TEMP/dwarves" -B "$RUNNER_TEMP/dwarves/build" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLIBBPF_EMBEDDED=ON \
+            -DCMAKE_INSTALL_PREFIX=/usr/local
+          cmake --build "$RUNNER_TEMP/dwarves/build" --parallel "$(nproc)"
+          sudo cmake --install "$RUNNER_TEMP/dwarves/build"
+          pahole --version
 
       - name: Checkout Workflow Source Code
         uses: actions/checkout@v4
@@ -189,20 +220,99 @@ jobs:
           bash ../.github/scripts/apply_config.sh "${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" "${{ needs.prepare.outputs.arch }}"
           echo "⭕ Merged Debian cloud-${{ needs.prepare.outputs.debian_arch }} base config with custom overrides"
           make CC="ccache gcc" HOSTCC="ccache gcc" olddefconfig
+          if ! grep -q '^CONFIG_DEBUG_INFO_BTF=y$' .config; then
+            echo "❌ CONFIG_DEBUG_INFO_BTF was not selected"
+            exit 1
+          fi
+          if grep -q '^CONFIG_DEBUG_INFO_NONE=y$' .config; then
+            echo "❌ CONFIG_DEBUG_INFO_NONE was unexpectedly selected"
+            exit 1
+          fi
           echo "✅ Final Kernel Build Configured for ${{ needs.prepare.outputs.arch }}"
+      - name: Record Diagnostic Environment
+        if: needs.prepare.outputs.diagnostic_build == 'true'
+        run: |
+          mkdir -p kernel-build-diagnostics
+          {
+            date -Is
+            uname -a
+            echo "CPU count: $(nproc)"
+            free -h
+            df -h
+            ulimit -a
+            command -v pahole
+            pahole --version
+            pahole --supported_btf_features || true
+            ldd "$(command -v pahole)" || true
+            git -C "$RUNNER_TEMP/dwarves" rev-parse HEAD
+            git -C "$RUNNER_TEMP/dwarves/lib/bpf" rev-parse HEAD
+            gcc --version
+            ld --version
+          } > kernel-build-diagnostics/environment.log 2>&1
+          grep -E '^(CONFIG_(DEBUG_INFO|DEBUG_INFO_BTF|DEBUG_INFO_BTF_MODULES|DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT|PAHOLE_VERSION|BPF_SYSCALL|WERROR)=|# CONFIG_(DEBUG_INFO_BTF|DEBUG_INFO_BTF_MODULES) is not set)' \
+            linux/.config > kernel-build-diagnostics/kernel-config-summary.log || true
       - name: Build Kernel (Debian Package)
         env:
           KBUILD_BUILD_USER: "cloudpassenger"
           KBUILD_BUILD_HOST: "github-actions"
           KBUILD_BUILD_TIMESTAMP: ""
           KDEB_COMPRESS: "xz"
+          DIAGNOSTIC_BUILD: ${{ needs.prepare.outputs.diagnostic_build }}
         run: |
           echo "⌛ Start Building Kernel (Debian Package) for ${{ needs.prepare.outputs.arch }}..."
           cd linux
-          make -j "$(nproc)" CC="ccache gcc" HOSTCC="ccache gcc" bindeb-pkg
+          if [ "$DIAGNOSTIC_BUILD" = "true" ]; then
+            DIAGNOSTIC_DIR=../kernel-build-diagnostics
+            if grep -q 'RESOLVE_BTFIDS_ARGS=""' scripts/link-vmlinux.sh; then
+              sed -i \
+                -e 's/RESOLVE_BTFIDS_ARGS=""/RESOLVE_BTFIDS_ARGS=" --verbose "/' \
+                -e 's/RESOLVE_BTFIDS_ARGS=" --fatal_warnings "/RESOLVE_BTFIDS_ARGS=" --verbose --fatal_warnings "/' \
+                scripts/link-vmlinux.sh
+            fi
+            set +e
+            make V=1 -j "$(nproc)" CC="ccache gcc" HOSTCC="ccache gcc" bindeb-pkg > "$DIAGNOSTIC_DIR/build.log" 2>&1
+            BUILD_STATUS=$?
+            set -e
+            if [ "$BUILD_STATUS" -ne 0 ]; then
+              echo "::group::BTF and linker diagnostics"
+              grep -nE 'BTF|pahole|resolve_btfids|FAILED|Failed|Error [0-9]+|Killed|out of memory' "$DIAGNOSTIC_DIR/build.log" | tail -n 200 || true
+              echo "::endgroup::"
+              echo "::group::Last 500 build log lines"
+              tail -n 500 "$DIAGNOSTIC_DIR/build.log"
+              echo "::endgroup::"
+              exit "$BUILD_STATUS"
+            fi
+          else
+            make -j "$(nproc)" CC="ccache gcc" HOSTCC="ccache gcc" bindeb-pkg
+          fi
           echo "✅ Kernel (Debian Package) Built Successfully"
           cp .config ../linux-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.debian_arch }}.config
           echo "✅ Copied Kernel Config"
+      - name: Collect Build Diagnostics
+        if: always() && needs.prepare.outputs.diagnostic_build == 'true'
+        run: |
+          mkdir -p kernel-build-diagnostics
+          cp linux/.config kernel-build-diagnostics/final.config 2>/dev/null || true
+          cp linux/include/config/auto.conf kernel-build-diagnostics/auto.conf 2>/dev/null || true
+          cp linux/scripts/Makefile.btf kernel-build-diagnostics/Makefile.btf 2>/dev/null || true
+          cp linux/scripts/link-vmlinux.sh kernel-build-diagnostics/link-vmlinux.sh 2>/dev/null || true
+          cp linux/scripts/gen-btf.sh kernel-build-diagnostics/gen-btf.sh 2>/dev/null || true
+          find linux -maxdepth 2 -type f \
+            \( -name '*vmlinux*' -o -name '*.BTF*' -o -name '*.btf.o' \) \
+            -printf '%p %s bytes\n' > kernel-build-diagnostics/btf-files.log || true
+          ccache --show-stats > kernel-build-diagnostics/ccache.log 2>&1 || true
+          dmesg > kernel-build-diagnostics/dmesg.log 2>&1 || true
+          if [ -f kernel-build-diagnostics/build.log ]; then
+            zstd -T0 -10 --rm kernel-build-diagnostics/build.log
+          fi
+      - name: Upload Build Diagnostics
+        if: always() && needs.prepare.outputs.diagnostic_build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-build-diagnostics-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.arch }}
+          path: kernel-build-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
