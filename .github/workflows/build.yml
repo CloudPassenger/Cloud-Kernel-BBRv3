@@ -106,9 +106,21 @@ jobs:
       - name: Update and install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential curl git patch jq openssl quilt \
-            libncurses-dev libssl-dev libelf-dev libdw-dev libudev-dev libpci-dev libcap-dev libpcre2-dev libcurl4-openssl-dev \
-            bison bc flex rsync debhelper lz4 pahole zstd dpkg-dev fakeroot kmod cpio xz-utils
+          sudo apt-get install -y build-essential cmake curl git patch jq openssl pkg-config quilt \
+            libncurses-dev libssl-dev libelf-dev libdw-dev libbpf-dev zlib1g-dev libudev-dev libpci-dev libcap-dev libpcre2-dev libcurl4-openssl-dev \
+            bison bc flex rsync debhelper lz4 zstd dpkg-dev fakeroot kmod cpio xz-utils
+
+      - name: Build and install pahole
+        run: |
+          git clone --branch v1.31 --depth=1 https://github.com/acmel/dwarves.git "$RUNNER_TEMP/dwarves"
+          cmake -S "$RUNNER_TEMP/dwarves" -B "$RUNNER_TEMP/dwarves/build" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLIBBPF_EMBEDDED=OFF \
+            -DCMAKE_INSTALL_PREFIX=/usr/local
+          cmake --build "$RUNNER_TEMP/dwarves/build" --parallel "$(nproc)"
+          sudo cmake --install "$RUNNER_TEMP/dwarves/build"
+          pahole --version
 
       - name: Checkout Workflow Source Code
         uses: actions/checkout@v4
