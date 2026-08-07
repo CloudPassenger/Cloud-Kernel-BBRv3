@@ -142,7 +142,7 @@ jobs:
           pahole --version
 
       - name: Checkout Workflow Source Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-tags: true
       - name: Download Linux Kernel Source
@@ -210,7 +210,7 @@ jobs:
           quilt push -a
           echo "✅ All Patches Applied"
       - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.23
         with:
           key: linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-${{ needs.prepare.outputs.debian_arch }}
       - name: Configure Kernel Build
@@ -307,14 +307,14 @@ jobs:
           fi
       - name: Upload Build Diagnostics
         if: always() && needs.prepare.outputs.diagnostic_build == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kernel-build-diagnostics-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.arch }}
           path: kernel-build-diagnostics/
           if-no-files-found: warn
           retention-days: 7
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kernel-${{ needs.prepare.outputs.arch }}
           path: |
@@ -336,7 +336,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Download Artifacts for ${{ needs.prepare.outputs.arch }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: kernel-${{ needs.prepare.outputs.arch }}
           path: ./
@@ -344,7 +344,7 @@ jobs:
         run: |
           rm -f linux-image-*-dbg_*.deb
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

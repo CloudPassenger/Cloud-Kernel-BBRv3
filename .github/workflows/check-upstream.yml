@@ -15,7 +15,7 @@ jobs:
         series: ["6.12", "6.18", "7.1"]
     steps:
       - name: Checkout Workflow Source Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -73,7 +73,7 @@ jobs:
 
       - name: Trigger x86_64 Build Workflow if needed
         if: steps.check_x86_64.outputs.BUILD_NEEDED == 'true'
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-x86_64-build
@@ -81,7 +81,7 @@ jobs:
 
       - name: Trigger arm64 Build Workflow if needed
         if: steps.check_arm64.outputs.BUILD_NEEDED == 'true'
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-arm64-build
