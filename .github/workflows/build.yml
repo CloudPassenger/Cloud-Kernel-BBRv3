@@ -1,4 +1,4 @@
-name: Build Debian Kernel
+name: Build Cloud Kernel Packages
 
 on:
   repository_dispatch:
@@ -19,12 +19,12 @@ on:
           - x86_64
           - arm64
       skip_cache:
-        description: "Skip Cache"
+        description: "Skip compiler caches"
         required: false
         default: false
         type: boolean
       diagnostic_build:
-        description: "Enable verbose build diagnostics"
+        description: "Enable verbose diagnostics for DEB, RPM, and APK builds"
         required: false
         default: false
         type: boolean
@@ -34,201 +34,213 @@ jobs:
     name: Prepare Build Parameters
     runs-on: ubuntu-24.04
     outputs:
-      kernel_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_VERSION }}
-      kernel_minor_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_MINOR_VERSION }}
-      kernel_major_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_MAJOR_VERSION }}
-      skip_cache: ${{ steps.prepare_build_parameters.outputs.SKIP_CACHE }}
-      diagnostic_build: ${{ steps.prepare_build_parameters.outputs.DIAGNOSTIC_BUILD }}
-      arch: ${{ steps.prepare_build_parameters.outputs.ARCH }}
-      debian_arch: ${{ steps.prepare_build_parameters.outputs.DEBIAN_ARCH }}
-      runner: ${{ steps.prepare_build_parameters.outputs.RUNNER }}
-      tag_suffix: ${{ steps.prepare_build_parameters.outputs.TAG_SUFFIX }}
+      kernel_version: ${{ steps.parameters.outputs.KERNEL_VERSION }}
+      kernel_series: ${{ steps.parameters.outputs.KERNEL_SERIES }}
+      kernel_major_version: ${{ steps.parameters.outputs.KERNEL_MAJOR_VERSION }}
+      skip_cache: ${{ steps.parameters.outputs.SKIP_CACHE }}
+      diagnostic_build: ${{ steps.parameters.outputs.DIAGNOSTIC_BUILD }}
+      arch: ${{ steps.parameters.outputs.ARCH }}
+      debian_arch: ${{ steps.parameters.outputs.DEBIAN_ARCH }}
+      rpm_arch: ${{ steps.parameters.outputs.RPM_ARCH }}
+      alpine_arch: ${{ steps.parameters.outputs.ALPINE_ARCH }}
+      runner: ${{ steps.parameters.outputs.RUNNER }}
+      tag_suffix: ${{ steps.parameters.outputs.TAG_SUFFIX }}
     steps:
       - name: Prepare Build Parameters
-        id: prepare_build_parameters
+        id: parameters
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          DISPATCH_VERSION: ${{ github.event.client_payload.kernel_version }}
+          DISPATCH_DIAGNOSTIC: ${{ github.event.client_payload.diagnostic_build }}
+          INPUT_VERSION: ${{ inputs.kernel_version }}
+          INPUT_ARCH: ${{ inputs.arch }}
+          INPUT_SKIP_CACHE: ${{ inputs.skip_cache }}
+          INPUT_DIAGNOSTIC: ${{ inputs.diagnostic_build }}
         run: |
-          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
-            KERNEL_VERSION="${{ github.event.client_payload.kernel_version }}"
-            case "${{ github.event.action }}" in
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then
+            KERNEL_VERSION="$DISPATCH_VERSION"
+            case "$EVENT_ACTION" in
               trigger-x86_64-build) ARCH=x86_64 ;;
               trigger-arm64-build) ARCH=arm64 ;;
               *)
-                echo "❌ Unknown repository_dispatch event type: ${{ github.event.action }}"
+                echo "Unknown repository_dispatch event type: $EVENT_ACTION" >&2
                 exit 1
                 ;;
             esac
             SKIP_CACHE=false
-            DIAGNOSTIC_BUILD="${{ github.event.client_payload.diagnostic_build }}"
-            if [ "$DIAGNOSTIC_BUILD" != "true" ]; then
-              DIAGNOSTIC_BUILD=false
-            fi
+            DIAGNOSTIC_BUILD=${DISPATCH_DIAGNOSTIC:-false}
           else
-            KERNEL_VERSION="${{ inputs.kernel_version }}"
-            ARCH="${{ inputs.arch }}"
-            SKIP_CACHE="${{ inputs.skip_cache }}"
-            DIAGNOSTIC_BUILD="${{ inputs.diagnostic_build }}"
+            KERNEL_VERSION="$INPUT_VERSION"
+            ARCH="$INPUT_ARCH"
+            SKIP_CACHE="$INPUT_SKIP_CACHE"
+            DIAGNOSTIC_BUILD="$INPUT_DIAGNOSTIC"
           fi
+
+          if ! [[ "$KERNEL_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid kernel version: $KERNEL_VERSION" >&2
+            exit 1
+          fi
+
           case "$DIAGNOSTIC_BUILD" in
             true|false) ;;
             *)
-              echo "❌ Invalid diagnostic build value: $DIAGNOSTIC_BUILD"
+              echo "Invalid diagnostic build value: $DIAGNOSTIC_BUILD" >&2
               exit 1
               ;;
           esac
-          KERNEL_MINOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 2)
-          KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
-          if [ -z "$KERNEL_VERSION" ]; then
-            echo "❌ Failed to get kernel version"
-            exit 1
-          fi
+
+          case "$SKIP_CACHE" in
+            true|false) ;;
+            *)
+              echo "Invalid skip cache value: $SKIP_CACHE" >&2
+              exit 1
+              ;;
+          esac
+
           case "$ARCH" in
             x86_64)
               DEBIAN_ARCH=amd64
+              RPM_ARCH=x86_64
+              ALPINE_ARCH=x86_64
               RUNNER=ubuntu-24.04
               TAG_SUFFIX=""
               ;;
             arm64)
               DEBIAN_ARCH=arm64
+              RPM_ARCH=aarch64
+              ALPINE_ARCH=aarch64
               RUNNER=ubuntu-24.04-arm
-              TAG_SUFFIX="-arm64"
+              TAG_SUFFIX=-arm64
               ;;
             *)
-              echo "❌ Unsupported architecture: $ARCH"
+              echo "Unsupported architecture: $ARCH" >&2
               exit 1
               ;;
           esac
-          echo "✅ Using kernel version: $KERNEL_VERSION"
-          echo "✅ Using kernel minor version: $KERNEL_MINOR_VERSION"
-          echo "✅ Using kernel major version: $KERNEL_MAJOR_VERSION"
-          echo "✅ Using architecture: $ARCH (debianarch: $DEBIAN_ARCH, runner: $RUNNER)"
-          echo "✅ Using skip cache: $SKIP_CACHE"
-          echo "✅ Using diagnostic build: $DIAGNOSTIC_BUILD"
+
+          KERNEL_SERIES=${KERNEL_VERSION%.*}
+          KERNEL_MAJOR_VERSION=${KERNEL_VERSION%%.*}
+
           {
             echo "KERNEL_VERSION=$KERNEL_VERSION"
-            echo "KERNEL_MINOR_VERSION=$KERNEL_MINOR_VERSION"
+            echo "KERNEL_SERIES=$KERNEL_SERIES"
             echo "KERNEL_MAJOR_VERSION=$KERNEL_MAJOR_VERSION"
             echo "SKIP_CACHE=$SKIP_CACHE"
             echo "DIAGNOSTIC_BUILD=$DIAGNOSTIC_BUILD"
             echo "ARCH=$ARCH"
             echo "DEBIAN_ARCH=$DEBIAN_ARCH"
+            echo "RPM_ARCH=$RPM_ARCH"
+            echo "ALPINE_ARCH=$ALPINE_ARCH"
             echo "RUNNER=$RUNNER"
             echo "TAG_SUFFIX=$TAG_SUFFIX"
           } >> "$GITHUB_OUTPUT"
 
-  build:
-    name: Build Debian Kernel Package for ${{ needs.prepare.outputs.arch }}
+  prepare-source:
+    name: Prepare Patched Source for ${{ needs.prepare.outputs.arch }}
     runs-on: ${{ needs.prepare.outputs.runner }}
     needs: prepare
-    outputs:
-      kernel_version: ${{ needs.prepare.outputs.kernel_version }}
-      build_time: ${{ steps.get_build_time.outputs.BUILD_TIMESTAMP }}
     steps:
-      - name: Update and install dependencies
+      - name: Install Source Preparation Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake curl git patch jq openssl pkg-config quilt \
-            libncurses-dev libssl-dev libelf-dev libdw-dev zlib1g-dev libudev-dev libpci-dev libcap-dev libpcre2-dev libcurl4-openssl-dev \
-            bison bc flex rsync debhelper lz4 zstd dpkg-dev fakeroot kmod cpio xz-utils
-      - name: Build and install pahole
-        run: |
-          git clone --branch v1.31 --depth=1 --recurse-submodules https://github.com/acmel/dwarves.git "$RUNNER_TEMP/dwarves"
-          cmake -S "$RUNNER_TEMP/dwarves" -B "$RUNNER_TEMP/dwarves/build" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DLIBBPF_EMBEDDED=ON \
-            -DCMAKE_INSTALL_PREFIX=/usr/local
-          cmake --build "$RUNNER_TEMP/dwarves/build" --parallel "$(nproc)"
-          sudo cmake --install "$RUNNER_TEMP/dwarves/build"
-          pahole --version
+          sudo apt-get install -y \
+            build-essential curl git jq patch quilt bison bc flex rsync cmake pkg-config \
+            libncurses-dev libdw-dev libelf-dev zlib1g-dev dpkg-dev xz-utils zstd
 
       - name: Checkout Workflow Source Code
         uses: actions/checkout@v7
         with:
           fetch-tags: true
-      - name: Download Linux Kernel Source
+
+      - name: Build and Install Pahole
+        run: sudo bash .github/scripts/build_pahole.sh "$RUNNER_TEMP/dwarves-v1.31"
+
+      - name: Prepare Shared Kernel Source
         run: |
-          echo "⌛ Downloading Linux Kernel Source Code for ${{ needs.prepare.outputs.kernel_version }}..."
-          wget https://cdn.kernel.org/pub/linux/kernel/v${{ needs.prepare.outputs.kernel_major_version }}.x/linux-${{ needs.prepare.outputs.kernel_version }}.tar.xz
-          tar -xf linux-${{ needs.prepare.outputs.kernel_version }}.tar.xz
-          rm linux-${{ needs.prepare.outputs.kernel_version }}.tar.xz
-          mv linux-${{ needs.prepare.outputs.kernel_version }} linux
-          echo "✅ Downloaded Linux Kernel Source Code for ${{ needs.prepare.outputs.kernel_version }}"
-      - name: Download Debian Kernel Additional Source
+          bash .github/scripts/prepare_kernel_source.sh \
+            "${{ needs.prepare.outputs.kernel_version }}" \
+            "${{ needs.prepare.outputs.arch }}" \
+            "$RUNNER_TEMP/kernel-work"
+
+      - name: Create Prepared Source Archive
         run: |
-          echo "⌛ Downloading Debian Kernel Additional Source..."
-          git clone -b debian/${{ needs.prepare.outputs.kernel_version }}-1 --depth=1 https://salsa.debian.org/kernel-team/linux.git linux-debian
-          echo "✅ Downloaded Debian Kernel Additional Source"
-      - name: Download Xanmod Patches
+          tar --zstd -cf prepared-kernel.tar.zst \
+            -C "$RUNNER_TEMP/kernel-work" linux
+          cp "$RUNNER_TEMP/kernel-work/build-manifest.json" .
+          cp "$RUNNER_TEMP/kernel-work/linux/.config" \
+            "linux-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.debian_arch }}.config"
+
+      - name: Upload Prepared Source
+        uses: actions/upload-artifact@v7
+        with:
+          name: prepared-kernel-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.arch }}
+          path: |
+            prepared-kernel.tar.zst
+            build-manifest.json
+            linux-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.debian_arch }}.config
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload Release Manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-manifest-${{ needs.prepare.outputs.arch }}
+          path: build-manifest.json
+          if-no-files-found: error
+
+  build-deb:
+    name: Build Debian Packages for ${{ needs.prepare.outputs.arch }}
+    runs-on: ${{ needs.prepare.outputs.runner }}
+    needs: [prepare, prepare-source]
+    outputs:
+      build_time: ${{ steps.build_time.outputs.BUILD_TIMESTAMP }}
+    steps:
+      - name: Install Debian Build Dependencies
         run: |
-          echo "⌛ Downloading Xanmod Patches..."
-          git clone --depth=1 https://gitlab.com/xanmod/linux-patches.git linux-xanmod-patches
-          if [ "${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" = "6.18" ] && \
-             dpkg --compare-versions "${{ needs.prepare.outputs.kernel_version }}" lt "6.18.33"; then
-            XANMOD_REF="0bc9e62789c65ae9b2cf8910773f892a51d9e896"
-            echo "⭕ Pinning Xanmod patches to $XANMOD_REF for pre-6.18.33 kernels"
-            git -C linux-xanmod-patches fetch --depth=1 origin "$XANMOD_REF"
-            git -C linux-xanmod-patches checkout --detach FETCH_HEAD
-          fi
-          XANMOD_FIX_DIR="xanmod_patch_fixes/${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}"
-          if [ -d "$XANMOD_FIX_DIR" ]; then
-            for fix_patch in "$XANMOD_FIX_DIR"/*.patch; do
-              [ -e "$fix_patch" ] || continue
-              echo "⭕ Applying local Xanmod patch fix: $fix_patch"
-              patch -d linux-xanmod-patches -p1 < "$fix_patch"
-            done
-          fi
-          echo "✅ Downloaded Xanmod Patches"
-      - name: Organize Patches
-        run: |
-          echo "⌛ Organizing Patches..."
-          cd linux
-          cp -R ../linux-debian/debian/patches ./patches
-          echo "⭕ Copied Debian Patches"
-          XANMOD_NET_DIR="../linux-xanmod-patches/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}.y-xanmod/net"
-          if [ ! -d "$XANMOD_NET_DIR" ]; then
-            XANMOD_NET_DIR="../linux-xanmod-patches/eol/linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}.y-xanmod/net"
-          fi
-          if [ ! -d "$XANMOD_NET_DIR" ]; then
-            echo "❌ Xanmod net patch directory not found for ${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}"
-            exit 1
-          fi
-          cp -R "$XANMOD_NET_DIR" ./patches/net
-          echo "⭕ Copied Xanmod Net Patches"
-          cp -R ../kernel_patches/${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }} ./patches/custom
-          cd patches
-          {
-            echo "# Net Patches from Xanmod"
-            find ./net -type f -name "*.patch" -printf "net/%P\n" | sort
-            echo "# Custom Patches"
-            find ./custom -type f -name "*.patch" -printf "custom/%P\n" | sort
-          } >> series
-          echo "✅ All Patches Organized"
-      - name: Apply Patches
-        run: |
-          echo "⌛ Applying Patches..."
-          cd linux
-          quilt push -a
-          echo "✅ All Patches Applied"
-      - name: Setup ccache
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential ccache cmake curl git patch jq openssl pkg-config quilt \
+            libncurses-dev libssl-dev libelf-dev libdw-dev zlib1g-dev libudev-dev \
+            libpci-dev libcap-dev libpcre2-dev libcurl4-openssl-dev bison bc flex \
+            rsync debhelper lz4 zstd dpkg-dev fakeroot kmod cpio xz-utils
+
+      - name: Checkout Workflow Source Code
+        uses: actions/checkout@v7
+
+      - name: Download Prepared Source
+        uses: actions/download-artifact@v8
+        with:
+          name: prepared-kernel-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.arch }}
+          path: prepared
+
+      - name: Extract Prepared Source
+        run: tar --zstd -xf prepared/prepared-kernel.tar.zst
+
+      - name: Build and Install Pahole
+        run: sudo bash .github/scripts/build_pahole.sh "$RUNNER_TEMP/dwarves-v1.31"
+
+      - name: Restore Debian Compiler Cache
+        if: needs.prepare.outputs.skip_cache != 'true'
         uses: hendrikmuhs/ccache-action@v1.2.23
         with:
-          key: linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-${{ needs.prepare.outputs.debian_arch }}
-      - name: Configure Kernel Build
+          key: deb-${{ needs.prepare.outputs.kernel_series }}-${{ needs.prepare.outputs.debian_arch }}
+
+      - name: Verify Prepared Configuration
         run: |
-          echo "⌛ Configuring Kernel Build..."
-          cd linux
-          bash ../.github/scripts/apply_config.sh "${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" "${{ needs.prepare.outputs.arch }}"
-          echo "⭕ Merged Debian cloud-${{ needs.prepare.outputs.debian_arch }} base config with custom overrides"
-          make CC="ccache gcc" HOSTCC="ccache gcc" olddefconfig
-          if ! grep -q '^CONFIG_DEBUG_INFO_BTF=y$' .config; then
-            echo "❌ CONFIG_DEBUG_INFO_BTF was not selected"
+          if ! grep -q '^CONFIG_DEBUG_INFO_BTF=y$' linux/.config; then
+            echo "CONFIG_DEBUG_INFO_BTF was not selected" >&2
             exit 1
           fi
-          if grep -q '^CONFIG_DEBUG_INFO_NONE=y$' .config; then
-            echo "❌ CONFIG_DEBUG_INFO_NONE was unexpectedly selected"
+          if grep -q '^CONFIG_DEBUG_INFO_NONE=y$' linux/.config; then
+            echo "CONFIG_DEBUG_INFO_NONE was unexpectedly selected" >&2
             exit 1
           fi
-          echo "✅ Final Kernel Build Configured for ${{ needs.prepare.outputs.arch }}"
+          if ! grep -q '^CONFIG_LOCALVERSION=""$' linux/.config; then
+            echo "CONFIG_LOCALVERSION must remain empty for this migration" >&2
+            exit 1
+          fi
+
       - name: Record Diagnostic Environment
         if: needs.prepare.outputs.diagnostic_build == 'true'
         run: |
@@ -240,54 +252,40 @@ jobs:
             free -h
             df -h
             ulimit -a
-            command -v pahole
             pahole --version
-            pahole --supported_btf_features || true
-            ldd "$(command -v pahole)" || true
-            git -C "$RUNNER_TEMP/dwarves" rev-parse HEAD
-            git -C "$RUNNER_TEMP/dwarves/lib/bpf" rev-parse HEAD
             gcc --version
             ld --version
           } > kernel-build-diagnostics/environment.log 2>&1
-          grep -E '^(CONFIG_(DEBUG_INFO|DEBUG_INFO_BTF|DEBUG_INFO_BTF_MODULES|DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT|PAHOLE_VERSION|BPF_SYSCALL|WERROR)=|# CONFIG_(DEBUG_INFO_BTF|DEBUG_INFO_BTF_MODULES) is not set)' \
+          grep -E '^(CONFIG_(DEBUG_INFO|DEBUG_INFO_BTF|DEBUG_INFO_BTF_MODULES|PAHOLE_VERSION|BPF_SYSCALL|WERROR|LOCALVERSION)=|# CONFIG_(DEBUG_INFO_BTF|DEBUG_INFO_BTF_MODULES) is not set)' \
             linux/.config > kernel-build-diagnostics/kernel-config-summary.log || true
-      - name: Build Kernel (Debian Package)
+
+      - name: Build Debian Kernel Packages
         env:
-          KBUILD_BUILD_USER: "cloudpassenger"
-          KBUILD_BUILD_HOST: "github-actions"
+          KBUILD_BUILD_USER: cloudpassenger
+          KBUILD_BUILD_HOST: github-actions
           KBUILD_BUILD_TIMESTAMP: ""
-          KDEB_COMPRESS: "xz"
+          KDEB_COMPRESS: xz
           DIAGNOSTIC_BUILD: ${{ needs.prepare.outputs.diagnostic_build }}
         run: |
-          echo "⌛ Start Building Kernel (Debian Package) for ${{ needs.prepare.outputs.arch }}..."
           cd linux
           if [ "$DIAGNOSTIC_BUILD" = "true" ]; then
             DIAGNOSTIC_DIR=../kernel-build-diagnostics
-            if grep -q 'RESOLVE_BTFIDS_ARGS=""' scripts/link-vmlinux.sh; then
-              sed -i \
-                -e 's/RESOLVE_BTFIDS_ARGS=""/RESOLVE_BTFIDS_ARGS=" --verbose "/' \
-                -e 's/RESOLVE_BTFIDS_ARGS=" --fatal_warnings "/RESOLVE_BTFIDS_ARGS=" --verbose --fatal_warnings "/' \
-                scripts/link-vmlinux.sh
-            fi
             set +e
-            make V=1 -j "$(nproc)" CC="ccache gcc" HOSTCC="ccache gcc" bindeb-pkg > "$DIAGNOSTIC_DIR/build.log" 2>&1
+            make V=1 -j "$(nproc)" CC="ccache gcc" HOSTCC="ccache gcc" bindeb-pkg \
+              > "$DIAGNOSTIC_DIR/build.log" 2>&1
             BUILD_STATUS=$?
             set -e
             if [ "$BUILD_STATUS" -ne 0 ]; then
-              echo "::group::BTF and linker diagnostics"
-              grep -nE 'BTF|pahole|resolve_btfids|FAILED|Failed|Error [0-9]+|Killed|out of memory' "$DIAGNOSTIC_DIR/build.log" | tail -n 200 || true
-              echo "::endgroup::"
-              echo "::group::Last 500 build log lines"
+              grep -nE 'BTF|pahole|resolve_btfids|FAILED|Failed|Error [0-9]+|Killed|out of memory' \
+                "$DIAGNOSTIC_DIR/build.log" | tail -n 200 || true
               tail -n 500 "$DIAGNOSTIC_DIR/build.log"
-              echo "::endgroup::"
               exit "$BUILD_STATUS"
             fi
           else
             make -j "$(nproc)" CC="ccache gcc" HOSTCC="ccache gcc" bindeb-pkg
           fi
-          echo "✅ Kernel (Debian Package) Built Successfully"
-          cp .config ../linux-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.debian_arch }}.config
-          echo "✅ Copied Kernel Config"
+          cp .config "../linux-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.debian_arch }}.config"
+
       - name: Collect Build Diagnostics
         if: always() && needs.prepare.outputs.diagnostic_build == 'true'
         run: |
@@ -296,15 +294,11 @@ jobs:
           cp linux/include/config/auto.conf kernel-build-diagnostics/auto.conf 2>/dev/null || true
           cp linux/scripts/Makefile.btf kernel-build-diagnostics/Makefile.btf 2>/dev/null || true
           cp linux/scripts/link-vmlinux.sh kernel-build-diagnostics/link-vmlinux.sh 2>/dev/null || true
-          cp linux/scripts/gen-btf.sh kernel-build-diagnostics/gen-btf.sh 2>/dev/null || true
-          find linux -maxdepth 2 -type f \
-            \( -name '*vmlinux*' -o -name '*.BTF*' -o -name '*.btf.o' \) \
-            -printf '%p %s bytes\n' > kernel-build-diagnostics/btf-files.log || true
           ccache --show-stats > kernel-build-diagnostics/ccache.log 2>&1 || true
-          dmesg > kernel-build-diagnostics/dmesg.log 2>&1 || true
           if [ -f kernel-build-diagnostics/build.log ]; then
             zstd -T0 -10 --rm kernel-build-diagnostics/build.log
           fi
+
       - name: Upload Build Diagnostics
         if: always() && needs.prepare.outputs.diagnostic_build == 'true'
         uses: actions/upload-artifact@v7
@@ -313,73 +307,342 @@ jobs:
           path: kernel-build-diagnostics/
           if-no-files-found: warn
           retention-days: 7
-      - name: Upload Artifacts
+
+      - name: Upload Debian Packages
         uses: actions/upload-artifact@v7
         with:
-          name: kernel-${{ needs.prepare.outputs.arch }}
+          name: release-deb-${{ needs.prepare.outputs.arch }}
           path: |
             *.deb
             *.changes
             *.buildinfo
             *.config
-      - name: Get build time
-        id: get_build_time
+          if-no-files-found: error
+
+      - name: Record Build Time
+        id: build_time
         run: |
           BUILD_TIMESTAMP=$(date -Is)
           echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" >> "$GITHUB_OUTPUT"
-          echo "BUILD_TIME=$BUILD_TIMESTAMP"
-          echo "🏷️ Build Time: $BUILD_TIMESTAMP"
 
-  create-release:
-    name: Create Release
-    needs: [prepare, build]
-    runs-on: ubuntu-24.04
+  build-rpm:
+    name: Build ${{ matrix.name }} RPMs for ${{ needs.prepare.outputs.arch }}
+    runs-on: ${{ needs.prepare.outputs.runner }}
+    needs: [prepare, prepare-source]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: fedora43
+            name: Fedora 43
+            image: fedora:43
+          - id: fedora44
+            name: Fedora 44
+            image: fedora:44
+          - id: el9
+            name: Enterprise Linux 9
+            image: rockylinux:9
+          - id: el10
+            name: Enterprise Linux 10
+            image: rockylinux:10
     steps:
-      - name: Download Artifacts for ${{ needs.prepare.outputs.arch }}
+      - name: Checkout Workflow Source Code
+        uses: actions/checkout@v7
+
+      - name: Download Prepared Source
         uses: actions/download-artifact@v8
         with:
-          name: kernel-${{ needs.prepare.outputs.arch }}
-          path: ./
-      - name: Remove Debug Package in Release
+          name: prepared-kernel-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.arch }}
+          path: prepared
+
+      - name: Restore RPM Compiler Cache
+        if: needs.prepare.outputs.skip_cache != 'true'
+        uses: actions/cache@v5
+        with:
+          path: .ccache/rpm/${{ matrix.id }}-${{ needs.prepare.outputs.arch }}
+          key: rpm-${{ matrix.id }}-${{ needs.prepare.outputs.kernel_series }}-${{ needs.prepare.outputs.arch }}-${{ github.sha }}
+          restore-keys: |
+            rpm-${{ matrix.id }}-${{ needs.prepare.outputs.kernel_series }}-${{ needs.prepare.outputs.arch }}-
+
+      - name: Build RPM Packages
+        env:
+          DIAGNOSTIC_BUILD: ${{ needs.prepare.outputs.diagnostic_build }}
         run: |
-          rm -f linux-image-*-dbg_*.deb
+          run_rpm_build() {
+            docker run --rm \
+              --volume "$GITHUB_WORKSPACE:/workspace" \
+              --workdir /workspace \
+              --env CCACHE_DIR="/workspace/.ccache/rpm/${{ matrix.id }}-${{ needs.prepare.outputs.arch }}" \
+              --env DIAGNOSTIC_BUILD="$DIAGNOSTIC_BUILD" \
+              "${{ matrix.image }}" \
+              bash .github/scripts/build_rpm.sh \
+                "${{ needs.prepare.outputs.kernel_version }}" \
+                "${{ needs.prepare.outputs.arch }}" \
+                "${{ matrix.id }}" \
+                prepared/prepared-kernel.tar.zst \
+                "dist/rpm/${{ matrix.id }}"
+          }
+
+          if [ "$DIAGNOSTIC_BUILD" != "true" ]; then
+            run_rpm_build
+            exit 0
+          fi
+
+          diagnostic_dir="kernel-build-diagnostics/rpm-${{ matrix.id }}"
+          mkdir -p "$diagnostic_dir"
+          set +e
+          run_rpm_build > "$diagnostic_dir/build.log" 2>&1
+          build_status=$?
+          set -e
+          if [ "$build_status" -ne 0 ]; then
+            echo "::group::RPM build diagnostics"
+            grep -nEi 'BTF|pahole|fatal|error:|failed|killed|no space|undefined reference' \
+              "$diagnostic_dir/build.log" | tail -n 200 || true
+            echo "::endgroup::"
+            echo "::group::Last 500 RPM build log lines"
+            tail -n 500 "$diagnostic_dir/build.log"
+            echo "::endgroup::"
+            exit "$build_status"
+          fi
+      - name: Collect RPM Build Diagnostics
+        if: always() && needs.prepare.outputs.diagnostic_build == 'true'
+        run: |
+          diagnostic_dir="kernel-build-diagnostics/rpm-${{ matrix.id }}"
+          mkdir -p "$diagnostic_dir"
+          {
+            date -Is
+            uname -a
+            echo "CPU count: $(nproc)"
+            free -h
+            df -h
+            docker version
+            docker image inspect "${{ matrix.image }}" --format '{{json .RepoDigests}}' || true
+          } > "$diagnostic_dir/environment.log" 2>&1
+          cp prepared/build-manifest.json "$diagnostic_dir/" 2>/dev/null || true
+          cp packaging/rpm/kernel-cloud-bbrv3.spec "$diagnostic_dir/" 2>/dev/null || true
+          cp ".build/rpm/${{ matrix.id }}-${{ needs.prepare.outputs.arch }}/linux/.config" \
+            "$diagnostic_dir/final.config" 2>/dev/null || true
+          cp ".build/rpm/${{ matrix.id }}-${{ needs.prepare.outputs.arch }}/rpmbuild.log" \
+            "$diagnostic_dir/rpmbuild.log" 2>/dev/null || true
+          for log in "$diagnostic_dir"/*.log; do
+            [ -f "$log" ] || continue
+            gzip -9 -f "$log"
+          done
+
+      - name: Upload RPM Build Diagnostics
+        if: always() && needs.prepare.outputs.diagnostic_build == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: kernel-build-diagnostics-rpm-${{ matrix.id }}-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.arch }}
+          path: kernel-build-diagnostics/rpm-${{ matrix.id }}/
+          if-no-files-found: warn
+          retention-days: 7
+
+
+      - name: Upload RPM Packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-rpm-${{ matrix.id }}-${{ needs.prepare.outputs.arch }}
+          path: dist/rpm/${{ matrix.id }}/*.rpm
+          if-no-files-found: error
+
+  build-apk:
+    name: Build Alpine 3.24 APKs for ${{ needs.prepare.outputs.arch }}
+    runs-on: ${{ needs.prepare.outputs.runner }}
+    needs: [prepare, prepare-source]
+    steps:
+      - name: Checkout Workflow Source Code
+        uses: actions/checkout@v7
+
+      - name: Download Prepared Source
+        uses: actions/download-artifact@v8
+        with:
+          name: prepared-kernel-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.arch }}
+          path: prepared
+
+      - name: Restore Alpine Compiler Cache
+        if: needs.prepare.outputs.skip_cache != 'true'
+        uses: actions/cache@v5
+        with:
+          path: .ccache/apk/alpine3.24-${{ needs.prepare.outputs.arch }}
+          key: apk-alpine3.24-${{ needs.prepare.outputs.kernel_series }}-${{ needs.prepare.outputs.arch }}-${{ github.sha }}
+          restore-keys: |
+            apk-alpine3.24-${{ needs.prepare.outputs.kernel_series }}-${{ needs.prepare.outputs.arch }}-
+
+      - name: Build APK Packages
+        env:
+          DIAGNOSTIC_BUILD: ${{ needs.prepare.outputs.diagnostic_build }}
+        run: |
+          run_apk_build() {
+            docker run --rm \
+              --volume "$GITHUB_WORKSPACE:/workspace" \
+              --workdir /workspace \
+              --env CCACHE_DIR="/workspace/.ccache/apk/alpine3.24-${{ needs.prepare.outputs.arch }}" \
+              --env DIAGNOSTIC_BUILD="$DIAGNOSTIC_BUILD" \
+              alpine:3.24 \
+              sh -c 'apk add --no-cache bash coreutils && exec bash .github/scripts/build_apk.sh "$@"' -- \
+                "${{ needs.prepare.outputs.kernel_version }}" \
+                "${{ needs.prepare.outputs.arch }}" \
+                alpine3.24 \
+                prepared/prepared-kernel.tar.zst \
+                dist/apk/alpine3.24
+          }
+
+          if [ "$DIAGNOSTIC_BUILD" != "true" ]; then
+            run_apk_build
+            exit 0
+          fi
+
+          diagnostic_dir="kernel-build-diagnostics/apk-alpine3.24"
+          mkdir -p "$diagnostic_dir"
+          set +e
+          run_apk_build > "$diagnostic_dir/build.log" 2>&1
+          build_status=$?
+          set -e
+          if [ "$build_status" -ne 0 ]; then
+            echo "::group::APK build diagnostics"
+            grep -nEi 'BTF|pahole|fatal|error:|failed|killed|no space|undefined reference|untrusted' \
+              "$diagnostic_dir/build.log" | tail -n 200 || true
+            echo "::endgroup::"
+            echo "::group::Last 500 APK build log lines"
+            tail -n 500 "$diagnostic_dir/build.log"
+            echo "::endgroup::"
+            exit "$build_status"
+          fi
+      - name: Collect APK Build Diagnostics
+        if: always() && needs.prepare.outputs.diagnostic_build == 'true'
+        run: |
+          diagnostic_dir="kernel-build-diagnostics/apk-alpine3.24"
+          mkdir -p "$diagnostic_dir"
+          {
+            date -Is
+            uname -a
+            echo "CPU count: $(nproc)"
+            free -h
+            df -h
+            docker version
+            docker image inspect alpine:3.24 --format '{{json .RepoDigests}}' || true
+          } > "$diagnostic_dir/environment.log" 2>&1
+          cp prepared/build-manifest.json "$diagnostic_dir/" 2>/dev/null || true
+          cp packaging/apk/APKBUILD.in "$diagnostic_dir/" 2>/dev/null || true
+          cp ".build/apk/alpine3.24-${{ needs.prepare.outputs.arch }}/aports/testing/linux-cloud-bbrv3/APKBUILD" \
+            "$diagnostic_dir/generated.APKBUILD" 2>/dev/null || true
+          cp ".build/apk/alpine3.24-${{ needs.prepare.outputs.arch }}/aports/testing/linux-cloud-bbrv3/src/linux/.config" \
+            "$diagnostic_dir/final.config" 2>/dev/null || true
+          for log in "$diagnostic_dir"/*.log; do
+            [ -f "$log" ] || continue
+            gzip -9 -f "$log"
+          done
+
+      - name: Upload APK Build Diagnostics
+        if: always() && needs.prepare.outputs.diagnostic_build == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: kernel-build-diagnostics-apk-alpine3.24-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.arch }}
+          path: kernel-build-diagnostics/apk-alpine3.24/
+          if-no-files-found: warn
+          retention-days: 7
+
+
+      - name: Upload APK Packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-apk-alpine3.24-${{ needs.prepare.outputs.arch }}
+          path: |
+            dist/apk/alpine3.24/*.apk
+            dist/apk/alpine3.24/*.rsa.pub
+          if-no-files-found: error
+
+  create-release:
+    name: Create Multi-Format Release
+    needs: [prepare, build-deb, build-rpm, build-apk]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download Package Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-*-${{ needs.prepare.outputs.arch }}
+          path: release-assets
+          merge-multiple: true
+
+      - name: Remove Debian Debug Package
+        run: find release-assets -type f -name 'linux-image-*-dbg_*.deb' -delete
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ needs.prepare.outputs.kernel_version }}${{ needs.prepare.outputs.tag_suffix }}
-          name: Debian Cloud Kernel ${{ needs.prepare.outputs.kernel_version }} with BBR3 (${{ needs.prepare.outputs.debian_arch }})
+          name: Cloud Kernel ${{ needs.prepare.outputs.kernel_version }} with BBRv3 (${{ needs.prepare.outputs.arch }})
           body: |
-            🚀 **Kernel Version:** `${{ needs.prepare.outputs.kernel_version }}`
+            ## English
 
-            📅 **Build Time:** `${{ needs.build.outputs.build_time }}`
+            **Kernel version:** `${{ needs.prepare.outputs.kernel_version }}`
 
-            🛠️ **Build Information:**
-            - **Architecture:** `${{ needs.prepare.outputs.debian_arch }}`
-            - **Kernel Type:** `cloud`
-            - **Applied Patches:**
+            **Build time:** `${{ needs.build-deb.outputs.build_time }}`
+
+            **Build information:**
+            - **Architecture:** `${{ needs.prepare.outputs.arch }}`
+            - **Kernel type:** `cloud`
+            - **Package targets:** Debian/Ubuntu `.deb`, Fedora 43/44 `.rpm`, Enterprise Linux 9/10 `.rpm`, Alpine Linux 3.24 `.apk`
+            - **Applied patches:**
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
               - `BBRPlus` (modified from [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
               - `TCP Brutal` (from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
-            
-            --------
-            
-            🚀 **内核版本:** `${{ needs.prepare.outputs.kernel_version }}`
 
-            📅 **构建时间:** `${{ needs.build.outputs.build_time }}`
+            **Important:** Secure Boot is not currently supported. Keep the distribution kernel installed as a recovery option.
 
-            🛠️ **构建信息:**
-            - **架构:** `${{ needs.prepare.outputs.debian_arch }}`
-            - **内核类型:** `cloud`
-            - **应用补丁:**
-              - `Debian 补丁集合` (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
-              - `BBR V3` (来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
-              - `BBRPlus` (修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
-              - `TCP Brutal` (来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
+            ```bash
+            # Debian / Ubuntu
+            sudo dpkg -i linux-image-*.deb linux-headers-*.deb
+
+            # Fedora / Enterprise Linux
+            sudo dnf install ./kernel-cloud-bbrv3-[0-9]*.rpm ./kernel-cloud-bbrv3-devel-*.rpm
+
+            # Alpine Linux
+            sudo cp ./*.rsa.pub /etc/apk/keys/
+            sudo apk add ./linux-cloud-bbrv3-[0-9]*.apk ./linux-cloud-bbrv3-dev-*.apk
+            ```
+
+            ---
+
+            ## 中文
+
+            **内核版本：** `${{ needs.prepare.outputs.kernel_version }}`
+
+            **构建时间：** `${{ needs.build-deb.outputs.build_time }}`
+
+            **构建信息：**
+            - **架构：** `${{ needs.prepare.outputs.arch }}`
+            - **内核类型：** `cloud`
+            - **软件包目标：** Debian/Ubuntu `.deb`、Fedora 43/44 `.rpm`、Enterprise Linux 9/10 `.rpm`、Alpine Linux 3.24 `.apk`
+            - **应用补丁：**
+              - `Debian 补丁集合`（来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/)）
+              - `BBR V3`（来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches)）
+              - `BBRPlus`（修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable)）
+              - `TCP Brutal`（来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal)）
+
+            **重要提示：** 当前不支持 Secure Boot。请保留发行版原有内核作为恢复选项。
+
+            ```bash
+            # Debian / Ubuntu
+            sudo dpkg -i linux-image-*.deb linux-headers-*.deb
+
+            # Fedora / Enterprise Linux
+            sudo dnf install ./kernel-cloud-bbrv3-[0-9]*.rpm ./kernel-cloud-bbrv3-devel-*.rpm
+
+            # Alpine Linux
+            sudo cp ./*.rsa.pub /etc/apk/keys/
+            sudo apk add ./linux-cloud-bbrv3-[0-9]*.apk ./linux-cloud-bbrv3-dev-*.apk
+            ```
           files: |
-            *.deb
-            *.changes
-            *.buildinfo
-            *.config
+            release-assets/*.deb
+            release-assets/*.changes
+            release-assets/*.buildinfo
+            release-assets/*.config
+            release-assets/*.json
+            release-assets/*.rpm
+            release-assets/*.apk
+            release-assets/*.rsa.pub
