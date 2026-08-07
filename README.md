@@ -1,33 +1,61 @@
+<div align="center">
+
+<img src="Cloudy%20Kernel.png" alt="Cloud Kernel BBRv3" width="100%">
+
 # Cloud Kernel BBRv3
+
+**集成 BBRv3 / BBRPlus / Brutal，基于 Debian Cloud 内核配置，专为 VPS 健壮运行优化的定制内核**
+
+[![CI](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml)
+[![Upstream Check](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml)
+[![License](https://img.shields.io/badge/license-Unlicense-blue.svg)](https://unlicense.org/)
+
+![Kernel Series](https://img.shields.io/badge/kernel-6.12%20%7C%206.18%20%7C%207.1-blue)
+![BBRv3](https://img.shields.io/badge/BBR-v3-brightgreen)
+![BBRPlus](https://img.shields.io/badge/BBR-Plus-orange)
+![TCP Brutal](https://img.shields.io/badge/TCP-Brutal-red)
+![EEVDF](https://img.shields.io/badge/scheduler-EEVDF-blueviolet)
+![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20arm64-yellow)
 
 简体中文 | [English](README_en.md)
 
-> 集成 BBRv3/BBRPlus/Brutal，基于 Debian Cloud 内核配置，专门为VPS健壮运行优化的定制内核
-
-当前内核版本: 6.12 (稳定版)
-
-[![CI](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml)
+</div>
 
 ## 📦 项目概述
 
+维护的内核系列：
+
+| 系列 | 定位 | x86_64 | arm64 | 自动更新 |
+|---|:---:|:---:|:---:|:---:|
+| `6.12` | LTS | ✅ | ✅ | ✅ |
+| `6.18` | LTS | ✅ | ✅ | ✅ |
+| `7.1` | Active stable | ✅ | ✅ | ✅ |
+
+安装脚本默认选择 `7.1`，也可指定任一维护系列。`check-upstream.yml` 每日检查各系列最新的 Debian 上游版本，仅在对应架构的 release tag 尚不存在时触发构建。
+
 本仓库提供集成增强功能的 Debian 内核自动构建：
-- 使用 Linux Kernel 官方 6.12 源码 (来自 [kernel.org](https://cdn.kernel.org/pub/linux/kernel/v6.x/))
+- 使用 Linux Kernel 官方源码（6.12 / 6.18 / 7.1 系列，来自 [kernel.org](https://www.kernel.org/)）
 - 集成 Debian 内核团队维护的补丁 (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
 - **BBR 拥塞控制算法更新!**
   - 更新来自 Google 的 **BBRv3 拥塞控制算法** (来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
   - 保留原版 BBRv1 算法 （拥塞控制算法设置为 `bbr1` 使用）
   - 集成来自 dog250 & cx9208 的魔改 **BBRPlus** 拥塞控制算法 (修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
 - 内置 **TCP Brutal** 多路复用拥塞控制算法 (来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
-- 使用 Linux 6.12 上游 **EEVDF** 公平调度器，默认启用且不引入第三方 Scheduler 补丁
+- 使用上游 **EEVDF** 公平调度器，默认启用且不引入第三方 Scheduler 补丁
 - 多架构支持 (x86_64 & arm64)，每日自动构建跟踪更新
 
 ## 🚀 核心特性
 
 | 组件               | 详细信息                                                               |
 |--------------------|-----------------------------------------------------------------------|
-| 内核基础           | 最新 LTS 内核  (v6.12 系列) + Debian 团队补丁                            |
-| 网络优化           | BBRv3/BBRPlus/BBRv1 拥塞控制算法                                        |
-| CPU 调度器         | Linux 6.12 上游 EEVDF 公平调度器                                        |
+| 内核基础           | 6.12 / 6.18 / 7.1 系列 + Debian 团队补丁                                |
+| 网络优化           | BBRv3（内置默认）/ BBRPlus / BBRv1 / Brutal（模块）+ 默认 `sch_fq` qdisc |
+| CPU 调度器         | 上游 EEVDF 公平调度器                                                    |
+| 内存策略           | THP `madvise`、关闭 autogroup 与 NUMA 默认均衡                          |
+| CPU 规模 (x86)     | `NR_CPUS=512`、关闭 `MAXSMP`，适配 VPS 规模                             |
+| 安全加固           | 保留 `LIST_HARDENED`；x86 按策略关闭 CPU 漏洞缓解                       |
+| ZRAM 交换          | 多压缩算法支持（LZO + ZSTD）                                            |
+| 驱动精简           | 裁剪未用网卡厂商驱动，减小内核体积                                       |
 | 支持架构           | x86_64 (amd64) 和 arm64 (aarch64)                                      |
 | 构建频率           | 每日自动构建 + 支持手动触发                                              |
 
@@ -98,7 +126,7 @@ sysctl net.ipv4.tcp_available_congestion_control  # 应包含 bbr、bbr1、bbrpl
 1. 进入仓库 **Actions** 标签页
 2. 选择 **Build Debian Kernel** 工作流
 3. 点击 **Run workflow**
-4. 选择架构和强制重建选项
+4. 输入完整的内核版本（如 `6.18.15`），选择目标架构
 
 ## 🤝 参与贡献
 

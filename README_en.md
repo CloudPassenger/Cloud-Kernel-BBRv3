@@ -1,33 +1,61 @@
+<div align="center">
+
+<img src="Cloudy%20Kernel.png" alt="Cloud Kernel BBRv3" width="100%">
+
 # Cloud Kernel BBRv3
+
+**A Debian custom kernel with BBRv3 / BBRPlus / Brutal, based on Debian Cloud kernel configuration, optimized for VPS stable operation**
+
+[![CI](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml)
+[![Upstream Check](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml)
+[![License](https://img.shields.io/badge/license-Unlicense-blue.svg)](https://unlicense.org/)
+
+![Kernel Series](https://img.shields.io/badge/kernel-6.12%20%7C%206.18%20%7C%207.1-blue)
+![BBRv3](https://img.shields.io/badge/BBR-v3-brightgreen)
+![BBRPlus](https://img.shields.io/badge/BBR-Plus-orange)
+![TCP Brutal](https://img.shields.io/badge/TCP-Brutal-red)
+![EEVDF](https://img.shields.io/badge/scheduler-EEVDF-blueviolet)
+![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20arm64-yellow)
 
 English | [简体中文](README.md)
 
-> A Debian custom kernel with BBRv3/BBRPlus/Brutal, based on Debian Cloud kernel configuration, optimized for VPS stable operation
-
-Current Kernel Version: 6.12 (Stable)
-
-[![CI](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml)
+</div>
 
 ## 📦 Project Overview
 
+Maintained kernel series:
+
+| Series | Track | x86_64 | arm64 | Auto-update |
+|---|:---:|:---:|:---:|:---:|
+| `6.12` | LTS | ✅ | ✅ | ✅ |
+| `6.18` | LTS | ✅ | ✅ | ✅ |
+| `7.1` | Active stable | ✅ | ✅ | ✅ |
+
+The installer defaults to `7.1`, while every maintained series can be selected explicitly. `check-upstream.yml` checks the latest Debian upstream version for each series daily and only triggers a build when the matching architecture-specific release tag does not yet exist.
+
 This repository provides automated daily builds of Debian kernel packages with enhanced networking and scheduling features:
-- Using official Linux Kernel 6.12 source code (from [kernel.org](https://cdn.kernel.org/pub/linux/kernel/v6.x/))
+- Using official Linux Kernel source (6.12 / 6.18 / 7.1 series, from [kernel.org](https://www.kernel.org/))
 - Integrating patches maintained by the Debian kernel team (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
 - **BBR Congestion Control Algorithm Updates!**
   - Updated **BBRv3 congestion control** from Google (using [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
   - Retained original BBRv1 algorithm (set congestion control to `bbr1` to use)
   - Integrated modified **BBRPlus** congestion control algorithm from dog250 & cx9208 (modified from [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
 - Integrated **TCP Brutal** multiplexing (mux) congestion control algorithm from apernet (from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
-- Uses the upstream Linux 6.12 **EEVDF** fair scheduler by default without third-party Scheduler patches
+- Uses the upstream **EEVDF** fair scheduler by default without third-party Scheduler patches
 - Multi-architecture support (x86_64 & arm64), daily automatic builds tracking updates
 
 ## 🚀 Key Features
 
 | Component          | Details                                                                 |
 |--------------------|-------------------------------------------------------------------------|
-| Kernel Base        | Latest LTS kernel (v6.12 series) + Debian team patches                 |
-| Network Optimize   | BBRv3/BBRPlus/BBRv1 congestion control algorithms                      |
-| CPU Scheduler      | Upstream Linux 6.12 EEVDF fair scheduler                              |
+| Kernel Base        | 6.12 / 6.18 / 7.1 series + Debian team patches                        |
+| Network Optimize   | BBRv3 (built-in default) / BBRPlus / BBRv1 / Brutal (modules) + `sch_fq` qdisc |
+| CPU Scheduler      | Upstream EEVDF fair scheduler                                          |
+| Memory Policy      | THP `madvise`, autogroup & default NUMA balancing disabled             |
+| CPU Scale (x86)    | `NR_CPUS=512`, `MAXSMP` disabled, sized for VPS                       |
+| Hardening          | `LIST_HARDENED` retained; x86 CPU mitigations disabled by policy       |
+| ZRAM Swap          | Multi-compression support (LZO + ZSTD)                                |
+| Driver Trim        | Unused NIC vendor drivers stripped to reduce kernel size              |
 | Architecture       | x86_64 (amd64) & arm64 (aarch64)                                      |
 | Build Frequency    | Daily automatic builds + manual trigger support                        |
 
@@ -98,7 +126,7 @@ To build manually using GitHub Actions:
 1. Go to Repository **Actions** tab
 2. Select **Build Debian Kernel** workflow
 3. Click **Run workflow**
-4. Select architecture and force rebuild options
+4. Enter a full kernel version (e.g. `6.18.15`) and select the target architecture
 
 ## 🤝 Contributing
 
