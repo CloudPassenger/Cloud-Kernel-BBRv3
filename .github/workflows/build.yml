@@ -107,7 +107,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential curl git patch jq openssl quilt \
-            libncurses-dev libssl-dev libelf-dev libudev-dev libpci-dev libcap-dev libpcre2-dev libcurl4-openssl-dev \
+            libncurses-dev libssl-dev libelf-dev libdw-dev libudev-dev libpci-dev libcap-dev libpcre2-dev libcurl4-openssl-dev \
             bison bc flex rsync debhelper lz4 pahole zstd dpkg-dev fakeroot kmod cpio xz-utils
 
       - name: Checkout Workflow Source Code
@@ -131,6 +131,13 @@ jobs:
         run: |
           echo "⌛ Downloading Xanmod Patches..."
           git clone --depth=1 https://gitlab.com/xanmod/linux-patches.git linux-xanmod-patches
+          if [ "${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" = "6.18" ] && \
+             dpkg --compare-versions "${{ needs.prepare.outputs.kernel_version }}" lt "6.18.33"; then
+            XANMOD_REF="0bc9e62789c65ae9b2cf8910773f892a51d9e896"
+            echo "⭕ Pinning Xanmod patches to $XANMOD_REF for pre-6.18.33 kernels"
+            git -C linux-xanmod-patches fetch --depth=1 origin "$XANMOD_REF"
+            git -C linux-xanmod-patches checkout --detach FETCH_HEAD
+          fi
           XANMOD_FIX_DIR="xanmod_patch_fixes/${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}"
           if [ -d "$XANMOD_FIX_DIR" ]; then
             for fix_patch in "$XANMOD_FIX_DIR"/*.patch; do
@@ -158,10 +165,12 @@ jobs:
           echo "⭕ Copied Xanmod Net Patches"
           cp -R ../kernel_patches/${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }} ./patches/custom
           cd patches
-          echo "# Net Patches from Xanmod" >> series
-          find ./net -type f -name "*.patch" -printf "net/%P\n" | sort >> series
-          echo "# Custom Patches" >> series
-          find ./custom -type f -name "*.patch" -printf "custom/%P\n" | sort >> series
+          {
+            echo "# Net Patches from Xanmod"
+            find ./net -type f -name "*.patch" -printf "net/%P\n" | sort
+            echo "# Custom Patches"
+            find ./custom -type f -name "*.patch" -printf "custom/%P\n" | sort
+          } >> series
           echo "✅ All Patches Organized"
       - name: Apply Patches
         run: |
@@ -177,7 +186,7 @@ jobs:
         run: |
           echo "⌛ Configuring Kernel Build..."
           cd linux
-          bash ../.github/scripts/apply_config.sh "${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" ${{ needs.prepare.outputs.arch }}
+          bash ../.github/scripts/apply_config.sh "${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" "${{ needs.prepare.outputs.arch }}"
           echo "⭕ Merged Debian cloud-${{ needs.prepare.outputs.debian_arch }} base config with custom overrides"
           make CC="ccache gcc" HOSTCC="ccache gcc" olddefconfig
           echo "✅ Final Kernel Build Configured for ${{ needs.prepare.outputs.arch }}"
@@ -190,7 +199,7 @@ jobs:
         run: |
           echo "⌛ Start Building Kernel (Debian Package) for ${{ needs.prepare.outputs.arch }}..."
           cd linux
-          make -j $(nproc) CC="ccache gcc" HOSTCC="ccache gcc" bindeb-pkg
+          make -j "$(nproc)" CC="ccache gcc" HOSTCC="ccache gcc" bindeb-pkg
           echo "✅ Kernel (Debian Package) Built Successfully"
           cp .config ../linux-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.debian_arch }}.config
           echo "✅ Copied Kernel Config"
@@ -207,7 +216,7 @@ jobs:
         id: get_build_time
         run: |
           BUILD_TIMESTAMP=$(date -Is)
-          echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" >> "$GITHUB_OUTPUT"
           echo "BUILD_TIME=$BUILD_TIMESTAMP"
           echo "🏷️ Build Time: $BUILD_TIMESTAMP"
 

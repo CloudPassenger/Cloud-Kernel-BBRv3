@@ -24,10 +24,10 @@ jobs:
         id: check_series_ready
         run: |
           if [ -d "kernel_patches/${{ matrix.series }}" ] && [ -d "custom_configs/${{ matrix.series }}" ]; then
-            echo "READY=true" >> $GITHUB_OUTPUT
+            echo "READY=true" >> "$GITHUB_OUTPUT"
           else
             echo "⏭️ Skipping ${{ matrix.series }}: kernel_patches/custom_configs not prepared yet"
-            echo "READY=false" >> $GITHUB_OUTPUT
+            echo "READY=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Get Latest Kernel Version
@@ -41,7 +41,7 @@ jobs:
             exit 1
           fi
           echo "✅ Latest Debian kernel version: $kernel_version"
-          echo "KERNEL_VERSION=$kernel_version" >> $GITHUB_OUTPUT
+          echo "KERNEL_VERSION=$kernel_version" >> "$GITHUB_OUTPUT"
 
       - name: Check x86_64 Build Status
         id: check_x86_64
@@ -51,10 +51,10 @@ jobs:
           TAG_EXISTS=$(git tag --list | grep -x "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}" || echo "")
           if [ -n "$TAG_EXISTS" ]; then
             echo "✅ x86_64 build already exists for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
-            echo "BUILD_NEEDED=false" >> $GITHUB_OUTPUT
+            echo "BUILD_NEEDED=false" >> "$GITHUB_OUTPUT"
           else
             echo "🔄 x86_64 build needed for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
-            echo "BUILD_NEEDED=true" >> $GITHUB_OUTPUT
+            echo "BUILD_NEEDED=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Check arm64 Build Status
@@ -65,10 +65,10 @@ jobs:
           TAG_EXISTS=$(git tag --list | grep -x "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}-arm64" || echo "")
           if [ -n "$TAG_EXISTS" ]; then
             echo "✅ arm64 build already exists for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
-            echo "BUILD_NEEDED=false" >> $GITHUB_OUTPUT
+            echo "BUILD_NEEDED=false" >> "$GITHUB_OUTPUT"
           else
             echo "🔄 arm64 build needed for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
-            echo "BUILD_NEEDED=true" >> $GITHUB_OUTPUT
+            echo "BUILD_NEEDED=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Trigger x86_64 Build Workflow if needed
@@ -90,7 +90,9 @@ jobs:
       - name: Summary
         if: steps.check_series_ready.outputs.READY == 'true'
         run: |
-          echo "## Kernel Version Check Results (${{ matrix.series }})" >> $GITHUB_STEP_SUMMARY
-          echo "- 📦 Kernel Version: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- 🔄 x86_64 Build Needed: ${{ steps.check_x86_64.outputs.BUILD_NEEDED }}" >> $GITHUB_STEP_SUMMARY
-          echo "- 🔄 arm64 Build Needed: ${{ steps.check_arm64.outputs.BUILD_NEEDED }}" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Kernel Version Check Results (${{ matrix.series }})"
+            echo "- 📦 Kernel Version: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
+            echo "- 🔄 x86_64 Build Needed: ${{ steps.check_x86_64.outputs.BUILD_NEEDED }}"
+            echo "- 🔄 arm64 Build Needed: ${{ steps.check_arm64.outputs.BUILD_NEEDED }}"
+          } >> "$GITHUB_STEP_SUMMARY"
