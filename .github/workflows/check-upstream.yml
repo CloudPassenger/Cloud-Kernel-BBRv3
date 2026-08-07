@@ -4,15 +4,84 @@ on:
   schedule:
     - cron: "0 0 * * *" # Runs daily at 00:00 UTC
   workflow_dispatch:
+    inputs:
+      force_build:
+        description: "Rebuild selected series even when release tags exist"
+        required: false
+        default: false
+        type: boolean
+      check_6_12:
+        description: "Check Linux 6.12"
+        required: false
+        default: true
+        type: boolean
+      check_6_18:
+        description: "Check Linux 6.18"
+        required: false
+        default: true
+        type: boolean
+      check_7_1:
+        description: "Check Linux 7.1"
+        required: false
+        default: true
+        type: boolean
 
 jobs:
+  prepare:
+    name: Prepare Selected Kernel Series
+    runs-on: ubuntu-24.04
+    outputs:
+      series: ${{ steps.select_series.outputs.SERIES }}
+      force_build: ${{ steps.select_series.outputs.FORCE_BUILD }}
+    steps:
+      - name: Select Kernel Series
+        id: select_series
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_BUILD_INPUT: ${{ inputs.force_build }}
+          CHECK_6_12: ${{ inputs.check_6_12 }}
+          CHECK_6_18: ${{ inputs.check_6_18 }}
+          CHECK_7_1: ${{ inputs.check_7_1 }}
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            selected_series=("6.12" "6.18" "7.1")
+            force_build=false
+          else
+            selected_series=()
+            [ "$CHECK_6_12" = "true" ] && selected_series+=("6.12")
+            [ "$CHECK_6_18" = "true" ] && selected_series+=("6.18")
+            [ "$CHECK_7_1" = "true" ] && selected_series+=("7.1")
+            force_build="$FORCE_BUILD_INPUT"
+          fi
+
+          if [ "${#selected_series[@]}" -eq 0 ]; then
+            echo "❌ Select at least one kernel series"
+            exit 1
+          fi
+
+          series_json="["
+          separator=""
+          for series in "${selected_series[@]}"; do
+            series_json+="${separator}\"${series}\""
+            separator=","
+          done
+          series_json+="]"
+
+          echo "✅ Selected kernel series: $series_json"
+          echo "✅ Force build: $force_build"
+          {
+            echo "SERIES=$series_json"
+            echo "FORCE_BUILD=$force_build"
+          } >> "$GITHUB_OUTPUT"
+
   check-kernel-versions:
     name: Check Kernel Versions (${{ matrix.series }})
     runs-on: ubuntu-24.04
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
-        series: ["6.12", "6.18", "7.1"]
+        series: ${{ fromJSON(needs.prepare.outputs.series) }}
     steps:
       - name: Checkout Workflow Source Code
         uses: actions/checkout@v7
@@ -46,28 +115,37 @@ jobs:
       - name: Check x86_64 Build Status
         id: check_x86_64
         if: steps.check_series_ready.outputs.READY == 'true'
+        env:
+          FORCE_BUILD: ${{ needs.prepare.outputs.force_build }}
+          KERNEL_VERSION: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}
         run: |
-          echo "🔍 Looking for tag: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
-          TAG_EXISTS=$(git tag --list | grep -x "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}" || echo "")
-          if [ -n "$TAG_EXISTS" ]; then
-            echo "✅ x86_64 build already exists for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
+          if [ "$FORCE_BUILD" = "true" ]; then
+            echo "🔄 Force build enabled for x86_64 $KERNEL_VERSION"
+            echo "BUILD_NEEDED=true" >> "$GITHUB_OUTPUT"
+          elif git rev-parse -q --verify "refs/tags/$KERNEL_VERSION" >/dev/null; then
+            echo "✅ x86_64 build already exists for version $KERNEL_VERSION"
             echo "BUILD_NEEDED=false" >> "$GITHUB_OUTPUT"
           else
-            echo "🔄 x86_64 build needed for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
+            echo "🔄 x86_64 build needed for version $KERNEL_VERSION"
             echo "BUILD_NEEDED=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Check arm64 Build Status
         id: check_arm64
         if: steps.check_series_ready.outputs.READY == 'true'
+        env:
+          FORCE_BUILD: ${{ needs.prepare.outputs.force_build }}
+          KERNEL_VERSION: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}
         run: |
-          echo "🔍 Looking for tag: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}-arm64"
-          TAG_EXISTS=$(git tag --list | grep -x "${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}-arm64" || echo "")
-          if [ -n "$TAG_EXISTS" ]; then
-            echo "✅ arm64 build already exists for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
+          ARM64_TAG="$KERNEL_VERSION-arm64"
+          if [ "$FORCE_BUILD" = "true" ]; then
+            echo "🔄 Force build enabled for arm64 $KERNEL_VERSION"
+            echo "BUILD_NEEDED=true" >> "$GITHUB_OUTPUT"
+          elif git rev-parse -q --verify "refs/tags/$ARM64_TAG" >/dev/null; then
+            echo "✅ arm64 build already exists for version $KERNEL_VERSION"
             echo "BUILD_NEEDED=false" >> "$GITHUB_OUTPUT"
           else
-            echo "🔄 arm64 build needed for version ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
+            echo "🔄 arm64 build needed for version $KERNEL_VERSION"
             echo "BUILD_NEEDED=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -93,6 +171,7 @@ jobs:
           {
             echo "## Kernel Version Check Results (${{ matrix.series }})"
             echo "- 📦 Kernel Version: ${{ steps.get_kernel_version.outputs.KERNEL_VERSION }}"
+            echo "- ⚡ Force Build: ${{ needs.prepare.outputs.force_build }}"
             echo "- 🔄 x86_64 Build Needed: ${{ steps.check_x86_64.outputs.BUILD_NEEDED }}"
             echo "- 🔄 arm64 Build Needed: ${{ steps.check_arm64.outputs.BUILD_NEEDED }}"
           } >> "$GITHUB_STEP_SUMMARY"
