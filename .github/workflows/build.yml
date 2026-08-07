@@ -106,20 +106,10 @@ jobs:
       - name: Update and install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake curl git patch jq openssl pkg-config quilt \
-            libncurses-dev libssl-dev libelf-dev libdw-dev zlib1g-dev libudev-dev libpci-dev libcap-dev libpcre2-dev libcurl4-openssl-dev \
+          sudo apt-get install -y build-essential curl git patch jq openssl quilt \
+            libncurses-dev libssl-dev libelf-dev libudev-dev libpci-dev libcap-dev libpcre2-dev libcurl4-openssl-dev \
             bison bc flex rsync debhelper lz4 zstd dpkg-dev fakeroot kmod cpio xz-utils
 
-      - name: Build and install pahole
-        run: |
-          git clone --branch v1.31 --depth=1 --recurse-submodules https://github.com/acmel/dwarves.git "$RUNNER_TEMP/dwarves"
-          cmake -S "$RUNNER_TEMP/dwarves" -B "$RUNNER_TEMP/dwarves/build" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DCMAKE_INSTALL_PREFIX=/usr/local
-          cmake --build "$RUNNER_TEMP/dwarves/build" --parallel "$(nproc)"
-          sudo cmake --install "$RUNNER_TEMP/dwarves/build"
-          pahole --version
 
       - name: Checkout Workflow Source Code
         uses: actions/checkout@v4
@@ -200,6 +190,14 @@ jobs:
           bash ../.github/scripts/apply_config.sh "${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}" "${{ needs.prepare.outputs.arch }}"
           echo "⭕ Merged Debian cloud-${{ needs.prepare.outputs.debian_arch }} base config with custom overrides"
           make CC="ccache gcc" HOSTCC="ccache gcc" olddefconfig
+          if ! grep -q '^CONFIG_DEBUG_INFO_NONE=y$' .config; then
+            echo "❌ CONFIG_DEBUG_INFO_NONE was not selected"
+            exit 1
+          fi
+          if grep -Eq '^CONFIG_DEBUG_INFO(=y|_BTF=y|_BTF_MODULES=y)$' .config; then
+            echo "❌ Debug information or BTF was unexpectedly enabled"
+            exit 1
+          fi
           echo "✅ Final Kernel Build Configured for ${{ needs.prepare.outputs.arch }}"
       - name: Build Kernel (Debian Package)
         env:
