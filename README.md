@@ -144,6 +144,8 @@ sysctl net.ipv4.tcp_available_congestion_control
 
 启用 `diagnostic_build` 后，DEB、每个 Fedora/EL RPM target 和 Alpine APK lane 都会使用详细构建输出，并上传保留 7 天的独立诊断 artifact；失败时 Workflow 日志仍会直接显示关键错误和末尾 500 行。
 
+从非 `main` 分支手动运行时，Workflow 仍会上传 prepared source、DEB、RPM、APK 和诊断 artifacts，但会跳过 `create-release` job，不创建 Git tag 或 GitHub Release。只有 `main` 分支构建会执行正式发布。
+
 ## 仓库结构
 
 | 路径 | 作用 |

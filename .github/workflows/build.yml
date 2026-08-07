@@ -556,6 +556,7 @@ jobs:
   create-release:
     name: Create Multi-Format Release
     needs: [prepare, build-deb, build-rpm, build-apk]
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - name: Download Package Artifacts

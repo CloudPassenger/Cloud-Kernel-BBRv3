@@ -144,6 +144,8 @@ The workflow selects `kernel_patches/<series>/` and `custom_configs/<series>/`, 
 
 When `diagnostic_build` is enabled, the DEB lane, every Fedora/EL RPM target, and the Alpine APK lane use verbose build output and upload separate diagnostic artifacts retained for seven days. On failure, the workflow log also prints matched errors and the final 500 lines.
 
+When run manually from a branch other than `main`, the workflow still uploads the prepared source, DEB, RPM, APK, and diagnostic artifacts, but skips the `create-release` job and creates no Git tag or GitHub Release. Only `main` branch builds perform a formal release.
+
 ## Repository Layout
 
 | Path | Purpose |
