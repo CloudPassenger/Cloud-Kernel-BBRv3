@@ -33,6 +33,12 @@ Maintained kernel series:
 
 The installer defaults to `7.1`, while every maintained series can be selected explicitly. `check-upstream.yml` checks the latest Debian upstream version for each series daily and only triggers a build when the matching architecture-specific release tag does not yet exist.
 
+> [!IMPORTANT]
+> **Kernel suffix change**: starting with the most recent update, kernels released by this project carry a `-cloudy` suffix by default (`CONFIG_LOCALVERSION="-cloudy"`).
+> As a result `uname -r` now reports something like `7.1.6-cloudy`, and files install to `/boot/vmlinuz-<version>-cloudy` and `/lib/modules/<version>-cloudy/`.
+> This prevents file conflicts with the distribution's own kernel of the same version and keeps the stock kernel available as a fallback boot entry.
+> Older releases built without a suffix are unaffected; if you previously installed one, the old and new kernels will coexist after upgrading, and you can remove the old package once the new kernel boots correctly.
+
 This repository provides automated daily builds of Debian kernel packages with enhanced networking and scheduling features:
 - Using official Linux Kernel source (6.12 / 6.18 / 7.1 series, from [kernel.org](https://www.kernel.org/))
 - Integrating patches maintained by the Debian kernel team (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
@@ -56,6 +62,7 @@ This repository provides automated daily builds of Debian kernel packages with e
 | Hardening          | `LIST_HARDENED` retained; x86 CPU mitigations disabled by policy       |
 | ZRAM Swap          | Multi-compression support (LZO + ZSTD)                                |
 | Driver Trim        | Unused NIC vendor drivers stripped to reduce kernel size              |
+| Kernel Suffix      | `-cloudy` by default (`CONFIG_LOCALVERSION`) to avoid stock conflicts |
 | Architecture       | x86_64 (amd64) & arm64 (aarch64)                                      |
 | Build Frequency    | Daily automatic builds + manual trigger support                        |
 
@@ -114,7 +121,7 @@ Script parameters:
 ### Verify Installation
 After reboot:
 ```bash
-uname -r  # Should show installed kernel version
+uname -r  # Should show the suffixed kernel version, e.g. 7.1.6-cloudy
 modinfo tcp_bbr1 tcp_bbrplus tcp_brutal  # Confirm the modules are installed
 sudo modprobe tcp_bbr1 tcp_bbrplus tcp_brutal  # Load modules before checking available algorithms
 sysctl net.ipv4.tcp_available_congestion_control  # Should include bbr, bbr1, bbrplus, brutal
@@ -127,6 +134,7 @@ To build manually using GitHub Actions:
 2. Select **Build Debian Kernel** workflow
 3. Click **Run workflow**
 4. Enter a full kernel version (e.g. `6.18.15`) and select the target architecture
+5. Optional: adjust the **Kernel suffix** input to customize the suffix (defaults to `cloudy`; leave empty to build without one)
 
 ## 🤝 Contributing
 

@@ -33,6 +33,12 @@
 
 安装脚本默认选择 `7.1`，也可指定任一维护系列。`check-upstream.yml` 每日检查各系列最新的 Debian 上游版本，仅在对应架构的 release tag 尚不存在时触发构建。
 
+> [!IMPORTANT]
+> **内核后缀变更提醒**：自最近一次更新起，本项目发布的内核默认带有 `-cloudy` 后缀（`CONFIG_LOCALVERSION="-cloudy"`）。
+> 因此 `uname -r` 将显示为 `7.1.6-cloudy` 这样的形式，安装路径也随之变为 `/boot/vmlinuz-<版本>-cloudy`、`/lib/modules/<版本>-cloudy/`。
+> 此变更用于避免与发行版官方同版本号内核发生文件冲突、互相覆盖，同时保证官方内核仍可作为回退启动项保留。
+> 早期未带后缀的旧版本不受影响；若你之前安装过无后缀版本，升级后新旧内核会共存，可在确认新内核可正常启动后自行移除旧包。
+
 本仓库提供集成增强功能的 Debian 内核自动构建：
 - 使用 Linux Kernel 官方源码（6.12 / 6.18 / 7.1 系列，来自 [kernel.org](https://www.kernel.org/)）
 - 集成 Debian 内核团队维护的补丁 (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
@@ -56,6 +62,7 @@
 | 安全加固           | 保留 `LIST_HARDENED`；x86 按策略关闭 CPU 漏洞缓解                       |
 | ZRAM 交换          | 多压缩算法支持（LZO + ZSTD）                                            |
 | 驱动精简           | 裁剪未用网卡厂商驱动，减小内核体积                                       |
+| 内核后缀           | 默认 `-cloudy`（`CONFIG_LOCALVERSION`），避免与官方内核冲突               |
 | 支持架构           | x86_64 (amd64) 和 arm64 (aarch64)                                      |
 | 构建频率           | 每日自动构建 + 支持手动触发                                              |
 
@@ -114,7 +121,7 @@ chmod +x install-kernel.sh
 ### 验证安装
 重启后执行：
 ```bash
-uname -r   # 应显示安装的内核版本
+uname -r   # 应显示带后缀的内核版本，如 7.1.6-cloudy
 modinfo tcp_bbr1 tcp_bbrplus tcp_brutal  # 确认模块已安装
 sudo modprobe tcp_bbr1 tcp_bbrplus tcp_brutal  # 加载模块后再查看可用算法
 sysctl net.ipv4.tcp_available_congestion_control  # 应包含 bbr、bbr1、bbrplus、brutal
@@ -127,6 +134,7 @@ sysctl net.ipv4.tcp_available_congestion_control  # 应包含 bbr、bbr1、bbrpl
 2. 选择 **Build Debian Kernel** 工作流
 3. 点击 **Run workflow**
 4. 输入完整的内核版本（如 `6.18.15`），选择目标架构
+5. 可选：修改 **Kernel suffix** 参数自定义内核后缀（默认 `cloudy`，留空则构建无后缀内核）
 
 ## 🤝 参与贡献
 

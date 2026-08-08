@@ -18,6 +18,11 @@ on:
         options:
           - x86_64
           - arm64
+      localversion:
+        description: "Kernel suffix (CONFIG_LOCALVERSION, leave empty to disable)"
+        required: false
+        default: "cloudy"
+        type: string
       skip_cache:
         description: "Skip Cache"
         required: false
@@ -37,6 +42,8 @@ jobs:
       kernel_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_VERSION }}
       kernel_minor_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_MINOR_VERSION }}
       kernel_major_version: ${{ steps.prepare_build_parameters.outputs.KERNEL_MAJOR_VERSION }}
+      localversion: ${{ steps.prepare_build_parameters.outputs.LOCALVERSION }}
+      localversion_display: ${{ steps.prepare_build_parameters.outputs.LOCALVERSION_DISPLAY }}
       skip_cache: ${{ steps.prepare_build_parameters.outputs.SKIP_CACHE }}
       diagnostic_build: ${{ steps.prepare_build_parameters.outputs.DIAGNOSTIC_BUILD }}
       arch: ${{ steps.prepare_build_parameters.outputs.ARCH }}
@@ -46,6 +53,8 @@ jobs:
     steps:
       - name: Prepare Build Parameters
         id: prepare_build_parameters
+        env:
+          INPUT_LOCALVERSION: ${{ inputs.localversion }}
         run: |
           if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
             KERNEL_VERSION="${{ github.event.client_payload.kernel_version }}"
@@ -62,11 +71,13 @@ jobs:
             if [ "$DIAGNOSTIC_BUILD" != "true" ]; then
               DIAGNOSTIC_BUILD=false
             fi
+            LOCALVERSION="cloudy"
           else
             KERNEL_VERSION="${{ inputs.kernel_version }}"
             ARCH="${{ inputs.arch }}"
             SKIP_CACHE="${{ inputs.skip_cache }}"
             DIAGNOSTIC_BUILD="${{ inputs.diagnostic_build }}"
+            LOCALVERSION="$INPUT_LOCALVERSION"
           fi
           case "$DIAGNOSTIC_BUILD" in
             true|false) ;;
@@ -75,6 +86,11 @@ jobs:
               exit 1
               ;;
           esac
+          LOCALVERSION="${LOCALVERSION#-}"
+          if [ -n "$LOCALVERSION" ] && ! printf '%s' "$LOCALVERSION" | grep -Eq '^[A-Za-z0-9._+-]+$'; then
+            echo "❌ Invalid localversion: $LOCALVERSION (allowed: A-Z a-z 0-9 . _ + -)"
+            exit 1
+          fi
           KERNEL_MINOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 2)
           KERNEL_MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d '.' -f 1)
           if [ -z "$KERNEL_VERSION" ]; then
@@ -103,10 +119,18 @@ jobs:
           echo "✅ Using architecture: $ARCH (debianarch: $DEBIAN_ARCH, runner: $RUNNER)"
           echo "✅ Using skip cache: $SKIP_CACHE"
           echo "✅ Using diagnostic build: $DIAGNOSTIC_BUILD"
+          if [ -n "$LOCALVERSION" ]; then
+            LOCALVERSION_DISPLAY="-$LOCALVERSION"
+          else
+            LOCALVERSION_DISPLAY="(none)"
+          fi
+          echo "✅ Using kernel localversion: $LOCALVERSION_DISPLAY"
           {
             echo "KERNEL_VERSION=$KERNEL_VERSION"
             echo "KERNEL_MINOR_VERSION=$KERNEL_MINOR_VERSION"
             echo "KERNEL_MAJOR_VERSION=$KERNEL_MAJOR_VERSION"
+            echo "LOCALVERSION=$LOCALVERSION"
+            echo "LOCALVERSION_DISPLAY=$LOCALVERSION_DISPLAY"
             echo "SKIP_CACHE=$SKIP_CACHE"
             echo "DIAGNOSTIC_BUILD=$DIAGNOSTIC_BUILD"
             echo "ARCH=$ARCH"
@@ -214,6 +238,8 @@ jobs:
         with:
           key: linux-${{ needs.prepare.outputs.kernel_major_version }}.${{ needs.prepare.outputs.kernel_minor_version }}-${{ needs.prepare.outputs.debian_arch }}
       - name: Configure Kernel Build
+        env:
+          KERNEL_LOCALVERSION: ${{ needs.prepare.outputs.localversion }}
         run: |
           echo "⌛ Configuring Kernel Build..."
           cd linux
@@ -228,6 +254,16 @@ jobs:
             echo "❌ CONFIG_DEBUG_INFO_NONE was unexpectedly selected"
             exit 1
           fi
+          if [ -n "$KERNEL_LOCALVERSION" ]; then
+            EXPECTED_LOCALVERSION="CONFIG_LOCALVERSION=\"-$KERNEL_LOCALVERSION\""
+          else
+            EXPECTED_LOCALVERSION='CONFIG_LOCALVERSION=""'
+          fi
+          if ! grep -qxF "$EXPECTED_LOCALVERSION" .config; then
+            echo "❌ Expected $EXPECTED_LOCALVERSION, got: $(grep '^CONFIG_LOCALVERSION=' .config)"
+            exit 1
+          fi
+          echo "⭕ Kernel release: $(make -s kernelrelease)"
           echo "✅ Final Kernel Build Configured for ${{ needs.prepare.outputs.arch }}"
       - name: Record Diagnostic Environment
         if: needs.prepare.outputs.diagnostic_build == 'true'
@@ -358,6 +394,7 @@ jobs:
             🛠️ **Build Information:**
             - **Architecture:** `${{ needs.prepare.outputs.debian_arch }}`
             - **Kernel Type:** `cloud`
+            - **Kernel Suffix (LOCALVERSION):** `${{ needs.prepare.outputs.localversion_display }}`
             - **Applied Patches:**
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
@@ -373,6 +410,7 @@ jobs:
             🛠️ **构建信息:**
             - **架构:** `${{ needs.prepare.outputs.debian_arch }}`
             - **内核类型:** `cloud`
+            - **内核后缀 (LOCALVERSION):** `${{ needs.prepare.outputs.localversion_display }}`
             - **应用补丁:**
               - `Debian 补丁集合` (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))

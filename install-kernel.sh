@@ -24,6 +24,7 @@ KERNEL_SERIES=""
 ARCH=""
 LANGUAGE="zh"  # Default language: Chinese
 SELECTED_TAG=""
+KERNEL_RELEASE=""
 IS_ROOT=false
 AUTO_REBOOT=true
 SPECIFIED_VERSION=""
@@ -72,6 +73,11 @@ STRINGS[en,invalid_version]="Error: Kernel version must use the full x.y.z forma
 STRINGS[en,version_series_mismatch]="Error: The specified kernel version does not belong to the selected series."
 STRINGS[en,missing_option_value]="Error: Missing value for option:"
 STRINGS[en,downloading]="Downloading kernel packages..."
+STRINGS[en,kernel_release]="Kernel release:"
+STRINGS[en,suffix_detected]="Kernel suffix detected:"
+STRINGS[en,no_suffix_warning]="Note: this release carries no kernel suffix, so it may conflict with the distribution kernel of the same version."
+STRINGS[en,boot_entry_missing]="Warning: the expected boot image was not found, please check the boot loader:"
+STRINGS[en,boot_entry_found]="Installed boot image:"
 STRINGS[en,created_dir]="Created download directory:"
 STRINGS[en,downloading_file]="Downloading:"
 STRINGS[en,download_success]="Successfully downloaded all kernel packages."
@@ -138,6 +144,11 @@ STRINGS[zh,invalid_version]="错误：内核版本必须使用完整的 x.y.z �
 STRINGS[zh,version_series_mismatch]="错误：指定的内核版本不属于所选系列。"
 STRINGS[zh,missing_option_value]="错误：选项缺少参数值："
 STRINGS[zh,downloading]="正在下载内核包..."
+STRINGS[zh,kernel_release]="内核发行版本号："
+STRINGS[zh,suffix_detected]="检测到内核后缀："
+STRINGS[zh,no_suffix_warning]="注意：此版本不带内核后缀，可能与同版本号的发行版官方内核冲突。"
+STRINGS[zh,boot_entry_missing]="警告：未找到预期的启动镜像，请检查引导器配置："
+STRINGS[zh,boot_entry_found]="已安装启动镜像："
 STRINGS[zh,created_dir]="已创建下载目录："
 STRINGS[zh,downloading_file]="正在下载："
 STRINGS[zh,download_success]="成功下载所有内核包。"
@@ -580,6 +591,43 @@ download_packages() {
     done <<< "$assets_json"
     
     print_colored "${GREEN}" "$(get_string download_success)"
+
+    detect_kernel_release
+}
+
+# Derive the kernel release (including any LOCALVERSION suffix) from the
+# downloaded linux-image package name, e.g.
+# linux-image-6.12.21-cloudy_6.12.21-1_amd64.deb -> 6.12.21-cloudy
+detect_kernel_release() {
+    local image_deb=""
+
+    while IFS= read -r image_deb; do
+        [ -n "$image_deb" ] || continue
+        local name
+        name=$(basename "$image_deb")
+        name="${name#linux-image-}"
+        name="${name%%_*}"
+        if [ -n "$name" ]; then
+            KERNEL_RELEASE="$name"
+            break
+        fi
+    done < <(find "$DOWNLOAD_DIR" -name "linux-image-*.deb" ! -name "*-dbg_*.deb" | sort)
+
+    if [ -z "$KERNEL_RELEASE" ]; then
+        return
+    fi
+
+    print_colored "${CYAN}" "$(get_string kernel_release) $KERNEL_RELEASE"
+
+    local base_version="${SELECTED_TAG%-arm64}"
+    local suffix="${KERNEL_RELEASE#"$base_version"}"
+    suffix="${suffix#-}"
+
+    if [ -n "$suffix" ]; then
+        print_colored "${GREEN}" "✓ $(get_string suffix_detected) -$suffix"
+    else
+        print_colored "${YELLOW}" "$(get_string no_suffix_warning)"
+    fi
 }
 
 # Install kernel packages
@@ -627,7 +675,16 @@ install_packages() {
     done
     
     print_colored "${GREEN}" "$(get_string install_success)"
-    
+
+    # Confirm the suffixed kernel image really landed in /boot before rebooting
+    if [ -n "$KERNEL_RELEASE" ]; then
+        if compgen -G "/boot/vmlinuz-${KERNEL_RELEASE}" >/dev/null; then
+            print_colored "${GREEN}" "✓ $(get_string boot_entry_found) /boot/vmlinuz-${KERNEL_RELEASE}"
+        else
+            print_colored "${YELLOW}" "$(get_string boot_entry_missing) /boot/vmlinuz-${KERNEL_RELEASE}"
+        fi
+    fi
+
     # Handle reboot based on AUTO_REBOOT flag
     if [ "$AUTO_REBOOT" = false ]; then
         print_colored "${YELLOW}" "$(get_string skip_reboot)"

@@ -10,6 +10,8 @@
 #   KERNEL_DIR        kernel source tree to configure (default: $PWD)
 #   DEBIAN_CONFIG_DIR  Debian debian/config directory (default: $KERNEL_DIR/../linux-debian/debian/config)
 #   CUSTOM_CONFIG      custom config fragment path (default: custom_configs/<series>/<arch>.config)
+#   KERNEL_LOCALVERSION  kernel suffix without the leading dash (default: cloudy;
+#                        set to an empty string to build without a suffix)
 set -euo pipefail
 
 usage() {
@@ -78,7 +80,33 @@ fragments+=(
   "$custom_config"
 )
 
+# Tag the kernel release with a suffix so it never collides with the
+# distribution's own packages of the same upstream version.
+localversion=${KERNEL_LOCALVERSION-cloudy}
+localversion=${localversion#-}
+if [ -n "$localversion" ] && ! printf '%s' "$localversion" | grep -Eq '^[A-Za-z0-9._+-]+$'; then
+  printf 'error: invalid localversion: %s\n' "$localversion" >&2
+  exit 1
+fi
+
+localversion_fragment=$(mktemp)
+trap 'rm -f "$localversion_fragment"' EXIT
+{
+  if [ -n "$localversion" ]; then
+    printf 'CONFIG_LOCALVERSION="-%s"\n' "$localversion"
+  else
+    printf 'CONFIG_LOCALVERSION=""\n'
+  fi
+  printf '# CONFIG_LOCALVERSION_AUTO is not set\n'
+} > "$localversion_fragment"
+fragments+=("$localversion_fragment")
+
 cd "$kernel_dir"
 "$merge_config" -m "${fragments[@]}"
 
 printf 'Merged Debian cloud-%s base config with %s\n' "$debianarch" "$custom_config"
+if [ -n "$localversion" ]; then
+  printf 'Kernel localversion set to -%s\n' "$localversion"
+else
+  printf 'Kernel localversion left empty\n'
+fi
