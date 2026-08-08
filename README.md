@@ -119,12 +119,20 @@ chmod +x install-kernel.sh
    ```
 
 ### 验证安装
+
 重启后执行：
+
 ```bash
-uname -r   # 应显示带后缀的内核版本，如 7.1.6-cloudy
-modinfo tcp_bbr1 tcp_bbrplus tcp_brutal  # 确认模块已安装
-sudo modprobe tcp_bbr1 tcp_bbrplus tcp_brutal  # 加载模块后再查看可用算法
-sysctl net.ipv4.tcp_available_congestion_control  # 应包含 bbr、bbr1、bbrplus、brutal
+uname -r                                # 应显示带后缀的内核版本，如 7.1.6-cloudy
+sysctl net.ipv4.tcp_congestion_control  # 应为 bbr（即 BBRv3，已内置并设为默认）
+sysctl net.core.default_qdisc           # 应为 fq
+```
+
+BBRv3 已内置且默认启用，无需额外配置。其余算法以模块形式提供，按需加载：
+
+```bash
+sudo modprobe tcp_bbr1 tcp_bbrplus tcp_brutal
+sysctl net.ipv4.tcp_available_congestion_control  # 加载后应包含 bbr bbr1 bbrplus brutal
 ```
 
 ## 🔧 自定义构建说明

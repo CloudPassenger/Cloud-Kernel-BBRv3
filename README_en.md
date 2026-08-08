@@ -119,12 +119,20 @@ Script parameters:
    ```
 
 ### Verify Installation
+
 After reboot:
+
 ```bash
-uname -r  # Should show the suffixed kernel version, e.g. 7.1.6-cloudy
-modinfo tcp_bbr1 tcp_bbrplus tcp_brutal  # Confirm the modules are installed
-sudo modprobe tcp_bbr1 tcp_bbrplus tcp_brutal  # Load modules before checking available algorithms
-sysctl net.ipv4.tcp_available_congestion_control  # Should include bbr, bbr1, bbrplus, brutal
+uname -r                                # Should show the suffixed version, e.g. 7.1.6-cloudy
+sysctl net.ipv4.tcp_congestion_control  # Should be bbr (BBRv3, built in and default)
+sysctl net.core.default_qdisc           # Should be fq
+```
+
+BBRv3 is built in and enabled by default, so no extra configuration is needed. The other algorithms ship as modules and can be loaded on demand:
+
+```bash
+sudo modprobe tcp_bbr1 tcp_bbrplus tcp_brutal
+sysctl net.ipv4.tcp_available_congestion_control  # Should then include bbr bbr1 bbrplus brutal
 ```
 
 ## 🔧 Custom Build Instructions
