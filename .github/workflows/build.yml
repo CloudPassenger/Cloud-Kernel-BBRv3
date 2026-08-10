@@ -29,7 +29,7 @@ on:
         default: false
         type: boolean
       diagnostic_build:
-        description: "Enable verbose diagnostics for DEB, RPM, and APK builds"
+        description: "Enable verbose diagnostics for DEB, RPM, APK, and Arch builds"
         required: false
         default: false
         type: boolean
@@ -509,6 +509,149 @@ jobs:
               [ ! -e "/boot/vmlinuz-$release" ]
             '
 
+  build-arch:
+    name: Build Arch Linux Packages for x86_64
+    if: needs.prepare.outputs.arch == 'x86_64'
+    runs-on: ubuntu-24.04
+    needs: [prepare, prepare-source]
+    steps:
+      - name: Checkout Workflow Source Code
+        uses: actions/checkout@v7
+
+      - name: Download Prepared Source
+        uses: actions/download-artifact@v8
+        with:
+          name: prepared-kernel-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.arch }}
+          path: prepared
+
+      - name: Restore Arch Compiler Cache
+        if: needs.prepare.outputs.skip_cache != 'true'
+        uses: actions/cache@v5
+        with:
+          path: .ccache/arch/generic-x86_64
+          key: arch-generic-${{ needs.prepare.outputs.kernel_series }}-x86_64-${{ github.sha }}
+          restore-keys: |
+            arch-generic-${{ needs.prepare.outputs.kernel_series }}-x86_64-
+
+      - name: Build Arch Linux Packages
+        env:
+          DIAGNOSTIC_BUILD: ${{ needs.prepare.outputs.diagnostic_build }}
+        run: |
+          run_arch_build() {
+            docker run --rm \
+              --volume "$GITHUB_WORKSPACE:/workspace" \
+              --workdir /workspace \
+              --env CCACHE_DIR=/workspace/.ccache/arch/generic-x86_64 \
+              --env DIAGNOSTIC_BUILD="$DIAGNOSTIC_BUILD" \
+              archlinux:base-devel \
+              bash .github/scripts/build_arch.sh \
+                "${{ needs.prepare.outputs.kernel_version }}" \
+                x86_64 \
+                generic \
+                prepared/prepared-kernel.tar.zst \
+                dist/arch/generic
+          }
+
+          if [ "$DIAGNOSTIC_BUILD" != "true" ]; then
+            run_arch_build
+            exit 0
+          fi
+
+          diagnostic_dir=kernel-build-diagnostics/arch-generic
+          mkdir -p "$diagnostic_dir"
+          set +e
+          run_arch_build > "$diagnostic_dir/build.log" 2>&1
+          build_status=$?
+          set -e
+          if [ "$build_status" -ne 0 ]; then
+            echo "::group::Arch build diagnostics"
+            grep -nEi 'BTF|pahole|fatal|error:|failed|killed|no space|undefined reference' \
+              "$diagnostic_dir/build.log" | tail -n 200 || true
+            echo "::endgroup::"
+            echo "::group::Last 500 Arch build log lines"
+            tail -n 500 "$diagnostic_dir/build.log"
+            echo "::endgroup::"
+            exit "$build_status"
+          fi
+
+      - name: Collect Arch Build Diagnostics
+        if: always() && needs.prepare.outputs.diagnostic_build == 'true'
+        run: |
+          diagnostic_dir=kernel-build-diagnostics/arch-generic
+          mkdir -p "$diagnostic_dir"
+          {
+            date -Is
+            uname -a
+            echo "CPU count: $(nproc)"
+            free -h
+            df -h
+            docker version
+            docker image inspect archlinux:base-devel --format '{{json .RepoDigests}}' || true
+          } > "$diagnostic_dir/environment.log" 2>&1
+          cp prepared/build-manifest.json "$diagnostic_dir/" 2>/dev/null || true
+          cp packaging/arch/PKGBUILD.in "$diagnostic_dir/" 2>/dev/null || true
+          cp .build/arch/generic-x86_64/package/PKGBUILD \
+            "$diagnostic_dir/generated.PKGBUILD" 2>/dev/null || true
+          cp .build/arch/generic-x86_64/package/src/linux/.config \
+            "$diagnostic_dir/final.config" 2>/dev/null || true
+          for log in "$diagnostic_dir"/*.log; do
+            [ -f "$log" ] || continue
+            gzip -9 -f "$log"
+          done
+
+      - name: Upload Arch Build Diagnostics
+        if: always() && needs.prepare.outputs.diagnostic_build == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: kernel-build-diagnostics-arch-generic-${{ needs.prepare.outputs.kernel_version }}-x86_64
+          path: kernel-build-diagnostics/arch-generic/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload Arch Linux Packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-arch-generic-x86_64
+          path: dist/arch/generic/*.pkg.tar.zst
+          if-no-files-found: error
+
+  validate-arch:
+    name: Validate Arch Linux Packages for x86_64
+    if: needs.prepare.outputs.arch == 'x86_64'
+    runs-on: ubuntu-24.04
+    needs: [prepare, build-arch]
+    steps:
+      - name: Download Arch Linux Packages
+        uses: actions/download-artifact@v8
+        with:
+          name: release-arch-generic-x86_64
+          path: packages
+
+      - name: Validate Install and Remove Lifecycle
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE/packages:/packages:ro" \
+            archlinux:base-devel \
+            bash -euxo pipefail -c '
+              pacman -Syu --noconfirm --needed mkinitcpio
+              pacman -U --noconfirm \
+                /packages/linux-cloud-bbrv3-headers-*.pkg.tar.zst \
+                /packages/linux-cloud-bbrv3-[0-9]*.pkg.tar.zst
+              modules_dir=$(dirname "$(find /usr/lib/modules -mindepth 2 -maxdepth 2 \
+                -name pkgbase -exec grep -lx linux-cloud-bbrv3 {} \; | head -n 1)")
+              release=${modules_dir##*/}
+              [ -n "$release" ]
+              [ -f "$modules_dir/vmlinuz" ]
+              [ -d "$modules_dir/build" ]
+              [ -L /usr/src/linux-cloud-bbrv3 ]
+              [ -f /boot/vmlinuz-linux-cloud-bbrv3 ]
+              [ -f /boot/initramfs-linux-cloud-bbrv3.img ]
+              pacman -Rns --noconfirm linux-cloud-bbrv3-headers linux-cloud-bbrv3
+              [ ! -e "$modules_dir" ]
+              [ ! -e /boot/vmlinuz-linux-cloud-bbrv3 ]
+              [ ! -e /boot/initramfs-linux-cloud-bbrv3.img ]
+            '
+
   build-apk:
     name: Build Generic Alpine APKs for ${{ needs.prepare.outputs.arch }}
     runs-on: ${{ needs.prepare.outputs.runner }}
@@ -682,8 +825,18 @@ jobs:
 
   create-release:
     name: Create Multi-Format Release
-    needs: [prepare, build-deb, build-rpm, validate-rpm, build-apk, validate-apk]
-    if: github.ref == 'refs/heads/main'
+    needs: [prepare, build-deb, build-rpm, validate-rpm, build-apk, validate-apk, build-arch, validate-arch]
+    if: >-
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.prepare.result == 'success' &&
+      needs.build-deb.result == 'success' &&
+      needs.build-rpm.result == 'success' &&
+      needs.validate-rpm.result == 'success' &&
+      needs.build-apk.result == 'success' &&
+      needs.validate-apk.result == 'success' &&
+      (needs.prepare.outputs.arch != 'x86_64' ||
+        (needs.build-arch.result == 'success' && needs.validate-arch.result == 'success'))
     runs-on: ubuntu-24.04
     environment: release-signing
     permissions:
@@ -761,17 +914,17 @@ jobs:
             - **Architecture:** `${{ needs.prepare.outputs.arch }}`
             - **Kernel type:** `cloud`
             - **Kernel suffix (LOCALVERSION):** `${{ needs.prepare.outputs.localversion_display }}`
-            - **Package targets:** Debian/Ubuntu `.deb`, generic Fedora/Enterprise Linux `.rpm`, generic Alpine Linux `.apk`
-            - **Validated targets:** Fedora 43/44, Enterprise Linux 9/10, Alpine Linux 3.21/3.22/3.23/3.24
+            - **Package targets:** Debian/Ubuntu `.deb`, generic Fedora/Enterprise Linux `.rpm`, generic Alpine Linux `.apk`, and Arch Linux `.pkg.tar.zst` (x86_64 only)
+            - **Validated targets:** Fedora 43/44, Enterprise Linux 9/10, Alpine Linux 3.21/3.22/3.23/3.24, and Arch Linux x86_64
             - **OpenPGP signing fingerprint:** `${{ vars.PACKAGE_SIGNING_GPG_FINGERPRINT }}`
-            - **Signature files:** `SHA256SUMS`, `SHA256SUMS.asc`, and `cloud-kernel-signing.asc`
+            - **Signature files:** native RPM signatures, Arch package `.sig` files, `SHA256SUMS`, `SHA256SUMS.asc`, and `cloud-kernel-signing.asc`
             - **Applied patches:**
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
               - `BBRPlus` (modified from [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
               - `TCP Brutal` (from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
 
-            **Important:** Secure Boot is not currently supported. Keep the distribution kernel installed as a recovery option.
+            **Important:** Secure Boot is not currently supported. Keep the distribution kernel installed as a recovery option. This VPS configuration disables USB/HID, so Arch Linux `mkinitcpio` may warn that `usbhid` is missing; do not use this kernel where boot-time USB keyboard input is required.
 
             ```bash
             # Debian / Ubuntu
@@ -783,6 +936,10 @@ jobs:
             # Alpine Linux
             sudo cp ./*.rsa.pub /etc/apk/keys/
             sudo apk add ./linux-cloud-bbrv3-[0-9]*.apk ./linux-cloud-bbrv3-dev-*.apk
+
+            # Arch Linux (x86_64 only)
+            sudo pacman -Syu
+            sudo pacman -U ./linux-cloud-bbrv3-[0-9]*.pkg.tar.zst ./linux-cloud-bbrv3-headers-*.pkg.tar.zst
             ```
 
             ---
@@ -797,17 +954,17 @@ jobs:
             - **架构：** `${{ needs.prepare.outputs.arch }}`
             - **内核类型：** `cloud`
             - **内核后缀 (LOCALVERSION)：** `${{ needs.prepare.outputs.localversion_display }}`
-            - **软件包目标：** Debian/Ubuntu `.deb`、通用 Fedora/Enterprise Linux `.rpm`、通用 Alpine Linux `.apk`
-            - **验证目标：** Fedora 43/44、Enterprise Linux 9/10、Alpine Linux 3.21/3.22/3.23/3.24
+            - **软件包目标：** Debian/Ubuntu `.deb`、通用 Fedora/Enterprise Linux `.rpm`、通用 Alpine Linux `.apk`，以及 Arch Linux `.pkg.tar.zst`（仅 x86_64）
+            - **验证目标：** Fedora 43/44、Enterprise Linux 9/10、Alpine Linux 3.21/3.22/3.23/3.24，以及 Arch Linux x86_64
             - **OpenPGP 签名指纹：** `${{ vars.PACKAGE_SIGNING_GPG_FINGERPRINT }}`
-            - **签名文件：** `SHA256SUMS`、`SHA256SUMS.asc` 和 `cloud-kernel-signing.asc`
+            - **签名文件：** RPM 原生签名、Arch 软件包 `.sig`、`SHA256SUMS`、`SHA256SUMS.asc` 和 `cloud-kernel-signing.asc`
             - **应用补丁：**
               - `Debian 补丁集合`（来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/)）
               - `BBR V3`（来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches)）
               - `BBRPlus`（修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable)）
               - `TCP Brutal`（来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal)）
 
-            **重要提示：** 当前不支持 Secure Boot。请保留发行版原有内核作为恢复选项。
+            **重要提示：** 当前不支持 Secure Boot。请保留发行版原有内核作为恢复选项。本 VPS 配置禁用了 USB/HID，因此 Arch Linux `mkinitcpio` 可能提示缺少 `usbhid`；需要在启动阶段使用 USB 键盘输入的机器不应使用此内核。
 
             ```bash
             # Debian / Ubuntu
@@ -819,6 +976,10 @@ jobs:
             # Alpine Linux
             sudo cp ./*.rsa.pub /etc/apk/keys/
             sudo apk add ./linux-cloud-bbrv3-[0-9]*.apk ./linux-cloud-bbrv3-dev-*.apk
+
+            # Arch Linux（仅 x86_64）
+            sudo pacman -Syu
+            sudo pacman -U ./linux-cloud-bbrv3-[0-9]*.pkg.tar.zst ./linux-cloud-bbrv3-headers-*.pkg.tar.zst
             ```
           files: |
             release-assets/*.deb
@@ -828,6 +989,8 @@ jobs:
             release-assets/*.json
             release-assets/*.rpm
             release-assets/*.apk
+            release-assets/*.pkg.tar.zst
+            release-assets/*.sig
             release-assets/*.rsa.pub
             release-assets/*.asc
             release-assets/SHA256SUMS

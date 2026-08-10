@@ -1,0 +1,142 @@
+# Maintainer: Cloud Kernel BBRv3 Maintainers <noreply@cloud-kernel-bbrv3.invalid>
+pkgbase=linux-cloud-bbrv3
+pkgname=(
+  "$pkgbase"
+  "$pkgbase-headers"
+)
+pkgver=@KERNEL_VERSION@
+pkgrel=1
+pkgdesc='Cloud kernel with BBRv3 and custom congestion controls'
+url='https://github.com/CloudPassenger/Cloud-Kernel-BBRv3'
+arch=(x86_64)
+license=(GPL-2.0-only)
+makedepends=(
+  bc
+  binutils
+  bison
+  ccache
+  flex
+  gcc
+  libelf
+  make
+  openssl
+  pahole
+  perl
+  python
+  rsync
+  xxhash
+  zstd
+)
+options=(
+  !debug
+  !strip
+)
+source=(prepared-kernel.tar.zst)
+sha256sums=('@SOURCE_SHA256@')
+_kernel_release=@KERNEL_RELEASE@
+_make_verbosity=@MAKE_VERBOSITY@
+
+prepare() {
+  cd linux
+  make ARCH=x86 olddefconfig
+
+  local actual_release
+  actual_release=$(make -s ARCH=x86 kernelrelease)
+  if [[ $actual_release != "$_kernel_release" ]]; then
+    printf 'error: expected kernel release %s, got %s\n' \
+      "$_kernel_release" "$actual_release" >&2
+    return 1
+  fi
+}
+
+build() {
+  cd linux
+  make -j"$(nproc)" --output-sync=target \
+    V="$_make_verbosity" \
+    ARCH=x86 \
+    CC='ccache gcc' \
+    HOSTCC='ccache gcc' \
+    KBUILD_BUILD_USER=cloudpassenger \
+    KBUILD_BUILD_HOST=archlinux \
+    KBUILD_BUILD_VERSION="$pkgrel-Arch"
+}
+
+_package() {
+  pkgdesc="The $pkgdesc kernel and modules"
+  depends=(
+    coreutils
+    initramfs
+    kmod
+  )
+  optdepends=(
+    "$pkgbase-headers: headers and scripts for building modules"
+    'linux-firmware: firmware images needed for some devices'
+    'wireless-regdb: correct wireless channels for the local country'
+  )
+
+  cd linux
+  local modulesdir="$pkgdir/usr/lib/modules/$_kernel_release"
+
+  install -Dm644 "$(make -s ARCH=x86 image_name)" "$modulesdir/vmlinuz"
+  printf '%s\n' "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
+
+  ZSTD_CLEVEL=19 make ARCH=x86 \
+    V="$_make_verbosity" \
+    INSTALL_MOD_PATH="$pkgdir/usr" \
+    INSTALL_MOD_STRIP=1 \
+    DEPMOD=/doesnt/exist \
+    modules_install
+
+  rm -f "$modulesdir/build" "$modulesdir/source"
+}
+
+_package-headers() {
+  pkgdesc="Headers and scripts for building modules for the $pkgdesc kernel"
+  depends=(
+    binutils
+    gcc
+    glibc
+    libelf
+    make
+    openssl
+    pahole
+    perl
+    python
+    xxhash
+    zlib
+    zstd
+  )
+
+  cd linux
+  local builddir="$pkgdir/usr/lib/modules/$_kernel_release/build"
+
+  make ARCH=x86 run-command \
+    V="$_make_verbosity" \
+    KBUILD_RUN_COMMAND="${PWD}/scripts/package/install-extmod-build $builddir"
+
+  local file
+  while IFS= read -r -d '' file; do
+    case "$(file -Sib "$file")" in
+      application/x-sharedlib\;*) strip $STRIP_SHARED "$file" ;;
+      application/x-archive\;*) strip $STRIP_STATIC "$file" ;;
+      application/x-executable\;*) strip $STRIP_BINARIES "$file" ;;
+      application/x-pie-executable\;*) strip $STRIP_SHARED "$file" ;;
+    esac
+  done < <(find "$builddir" -type f -perm -u+x ! -name vmlinux -print0)
+
+  if [[ -f $builddir/vmlinux ]]; then
+    strip $STRIP_STATIC "$builddir/vmlinux"
+  fi
+
+  mkdir -p "$pkgdir/usr/src"
+  ln -s "../lib/modules/$_kernel_release/build" \
+    "$pkgdir/usr/src/$pkgbase"
+}
+
+package_linux-cloud-bbrv3() {
+  _package
+}
+
+package_linux-cloud-bbrv3-headers() {
+  _package-headers
+}

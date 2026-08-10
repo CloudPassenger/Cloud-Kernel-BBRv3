@@ -60,11 +60,12 @@ STRINGS[en,language_selection]="Please select your language:"
 STRINGS[en,english]="English"
 STRINGS[en,chinese]="简体中文"
 STRINGS[en,checking_system]="Checking system compatibility..."
-STRINGS[en,not_debian_based]="Error: Supported systems are Debian 11+, Ubuntu 20.04+, Fedora 43/44, Enterprise Linux 9/10, and Alpine Linux 3.21-3.24."
+STRINGS[en,not_debian_based]="Error: Supported systems are Debian 11+, Ubuntu 20.04+, Fedora 43/44, Enterprise Linux 9/10, Alpine Linux 3.21-3.24, and Arch Linux x86_64."
 STRINGS[en,debian_version_too_old]="Error: Debian version must be 11 or higher. Detected version:"
 STRINGS[en,ubuntu_version_too_old]="Error: Ubuntu version must be 20.04 or higher. Detected version:"
 STRINGS[en,architecture_check]="Checking system architecture..."
 STRINGS[en,architecture_not_supported]="Error: Your system architecture is not supported. Only amd64 (x86_64) and arm64 (aarch64) are supported."
+STRINGS[en,arch_linux_x86_only]="Error: Official Arch Linux packages are available only for x86_64."
 STRINGS[en,detected_arch]="Detected architecture:"
 STRINGS[en,fetching_releases]="Fetching available kernel releases..."
 STRINGS[en,fetch_error]="Error fetching releases. Please check your internet connection and try again."
@@ -111,6 +112,7 @@ STRINGS[en,enter_choice]="Enter choice"
 STRINGS[en,build_time]="Build Time"
 STRINGS[en,updating_apt]="Updating package repository metadata..."
 STRINGS[en,apt_updated]="Package repository metadata updated successfully."
+STRINGS[en,pacman_update_notice]="Arch Linux package databases are used as-is to avoid an unsafe partial upgrade. Run 'sudo pacman -Syu' before this installer if the system is not fully updated."
 STRINGS[en,version_not_found]="Error: Specified version not found."
 STRINGS[en,using_auto_version]="Using latest available version in the selected series instead."
 STRINGS[en,help_title]="Cloud Kernel BBRv3 Installer - Help"
@@ -137,11 +139,12 @@ STRINGS[zh,language_selection]="请选择您的语言："
 STRINGS[zh,english]="English"
 STRINGS[zh,chinese]="简体中文"
 STRINGS[zh,checking_system]="正在检查系统兼容性..."
-STRINGS[zh,not_debian_based]="错误：支持 Debian 11+、Ubuntu 20.04+、Fedora 43/44、Enterprise Linux 9/10 和 Alpine Linux 3.21-3.24。"
+STRINGS[zh,not_debian_based]="错误：支持 Debian 11+、Ubuntu 20.04+、Fedora 43/44、Enterprise Linux 9/10、Alpine Linux 3.21-3.24，以及 Arch Linux x86_64。"
 STRINGS[zh,debian_version_too_old]="错误：Debian 版本必须为 11 或更高。检测到的版本："
 STRINGS[zh,ubuntu_version_too_old]="错误：Ubuntu 版本必须为 20.04 或更高。检测到的版本："
 STRINGS[zh,architecture_check]="正在检查系统架构..."
 STRINGS[zh,architecture_not_supported]="错误：您的系统架构不受支持。仅支持 amd64 (x86_64) 和 arm64 (aarch64)。"
+STRINGS[zh,arch_linux_x86_only]="错误：官方 Arch Linux 软件包仅提供 x86_64 架构。"
 STRINGS[zh,detected_arch]="检测到的架构："
 STRINGS[zh,fetching_releases]="正在获取可用的内核版本..."
 STRINGS[zh,fetch_error]="获取版本失败。请检查您的网络连接并重试。"
@@ -188,6 +191,7 @@ STRINGS[zh,enter_choice]="请输入选择"
 STRINGS[zh,build_time]="构建时间"
 STRINGS[zh,updating_apt]="正在更新软件包仓库元数据..."
 STRINGS[zh,apt_updated]="软件包仓库元数据更新成功。"
+STRINGS[zh,pacman_update_notice]="为避免不安全的部分升级，Arch Linux 将直接使用当前软件包数据库。如果系统不是最新状态，请先运行 'sudo pacman -Syu'。"
 STRINGS[zh,version_not_found]="错误：未找到指定版本。"
 STRINGS[zh,using_auto_version]="将使用所选系列的最新可用版本。"
 STRINGS[zh,help_title]="Cloud Kernel BBRv3 安装程序 - 帮助"
@@ -266,6 +270,11 @@ run_as_root() {
 
 # Update package repository metadata
 update_package_index() {
+    if [ "$DISTRO_FAMILY" = pacman ]; then
+        print_colored "${YELLOW}" "$(get_string pacman_update_notice)"
+        return
+    fi
+
     print_colored "${CYAN}" "$(get_string updating_apt)"
 
     case "$DISTRO_FAMILY" in
@@ -292,6 +301,7 @@ install_dependency() {
         deb) run_as_root apt-get install -y "$package_name" ;;
         rpm) run_as_root dnf install -y "$package_name" ;;
         apk) run_as_root apk add "$package_name" ;;
+        pacman) run_as_root pacman -S --needed --noconfirm "$package_name" ;;
         *)
             print_colored "${RED}" "$(get_string install_failed)"
             exit 1
@@ -303,7 +313,7 @@ install_dependency() {
 # Install GnuPG using the distribution-specific package name.
 install_gpg_dependency() {
     case "$DISTRO_FAMILY" in
-        deb|apk) install_dependency gpg gnupg ;;
+        deb|apk|pacman) install_dependency gpg gnupg ;;
         rpm) install_dependency gpg gnupg2 ;;
     esac
 }
@@ -398,6 +408,44 @@ verify_downloads() {
                 exit 1
             fi
         done
+    fi
+
+    if [ "$DISTRO_FAMILY" = pacman ]; then
+        local package_keyring
+        package_keyring=$(mktemp)
+        if ! gpg --batch --yes --dearmor --output "$package_keyring" "$public_key"; then
+            rm -f "$package_keyring"
+            print_colored "${RED}" "$(get_string verification_failed)"
+            exit 1
+        fi
+
+        local arch_package package_signature
+        local arch_package_count=0
+        for arch_package in "$DOWNLOAD_DIR"/*.pkg.tar.zst; do
+            [ -f "$arch_package" ] || continue
+            arch_package_count=$((arch_package_count + 1))
+            package_signature=$arch_package.sig
+            if [ ! -s "$package_signature" ] || \
+               ! gpgv --keyring "$package_keyring" "$package_signature" "$arch_package"; then
+                rm -f "$package_keyring"
+                print_colored "${RED}" "$(get_string verification_failed)"
+                exit 1
+            fi
+        done
+        if [ "$arch_package_count" -ne 2 ]; then
+            rm -f "$package_keyring"
+            print_colored "${RED}" "$(get_string verification_failed)"
+            exit 1
+        fi
+
+        if ! run_as_root pacman-key --init || \
+           ! run_as_root pacman-key --add "$public_key" || \
+           ! run_as_root pacman-key --lsign-key "$TRUSTED_GPG_FINGERPRINT"; then
+            rm -f "$package_keyring"
+            print_colored "${RED}" "$(get_string verification_failed)"
+            exit 1
+        fi
+        rm -f "$package_keyring"
     fi
 
     print_colored "${GREEN}" "✓ $(get_string verification_success)"
@@ -516,25 +564,26 @@ check_system() {
     # shellcheck disable=SC1091
     . /etc/os-release
     DISTRO_ID=${ID:-}
-    DISTRO_VERSION_MAJOR=${VERSION_ID%%.*}
-    if [[ ! "$DISTRO_VERSION_MAJOR" =~ ^[0-9]+$ ]]; then
-        print_colored "${RED}" "$(get_string not_debian_based)"
-        exit 1
-    fi
+    DISTRO_VERSION_MAJOR=""
 
     case "$DISTRO_ID" in
         debian)
             DISTRO_FAMILY=deb
-            if [ "$DISTRO_VERSION_MAJOR" -lt 11 ]; then
+            DISTRO_VERSION_MAJOR=${VERSION_ID%%.*}
+            if [[ ! "$DISTRO_VERSION_MAJOR" =~ ^[0-9]+$ ]] || \
+               [ "$DISTRO_VERSION_MAJOR" -lt 11 ]; then
                 print_colored "${RED}" "$(get_string debian_version_too_old) ${VERSION_ID:-unknown}"
                 exit 1
             fi
             ;;
         ubuntu)
             DISTRO_FAMILY=deb
+            DISTRO_VERSION_MAJOR=${VERSION_ID%%.*}
             local ubuntu_minor=${VERSION_ID#*.}
             ubuntu_minor=${ubuntu_minor%%.*}
-            if [ "$DISTRO_VERSION_MAJOR" -lt 20 ] || \
+            if [[ ! "$DISTRO_VERSION_MAJOR" =~ ^[0-9]+$ ]] || \
+               [[ ! "$ubuntu_minor" =~ ^[0-9]+$ ]] || \
+               [ "$DISTRO_VERSION_MAJOR" -lt 20 ] || \
                { [ "$DISTRO_VERSION_MAJOR" -eq 20 ] && [ "$ubuntu_minor" -lt 4 ]; }; then
                 print_colored "${RED}" "$(get_string ubuntu_version_too_old) ${VERSION_ID:-unknown}"
                 exit 1
@@ -542,14 +591,18 @@ check_system() {
             ;;
         fedora)
             DISTRO_FAMILY=rpm
-            if [ "$DISTRO_VERSION_MAJOR" -lt 43 ] || [ "$DISTRO_VERSION_MAJOR" -gt 44 ]; then
+            DISTRO_VERSION_MAJOR=${VERSION_ID%%.*}
+            if [[ ! "$DISTRO_VERSION_MAJOR" =~ ^[0-9]+$ ]] || \
+               [ "$DISTRO_VERSION_MAJOR" -lt 43 ] || [ "$DISTRO_VERSION_MAJOR" -gt 44 ]; then
                 print_colored "${RED}" "$(get_string not_debian_based)"
                 exit 1
             fi
             ;;
         rhel|rocky|centos|almalinux|ol)
             DISTRO_FAMILY=rpm
-            if [ "$DISTRO_VERSION_MAJOR" -lt 9 ] || [ "$DISTRO_VERSION_MAJOR" -gt 10 ]; then
+            DISTRO_VERSION_MAJOR=${VERSION_ID%%.*}
+            if [[ ! "$DISTRO_VERSION_MAJOR" =~ ^[0-9]+$ ]] || \
+               [ "$DISTRO_VERSION_MAJOR" -lt 9 ] || [ "$DISTRO_VERSION_MAJOR" -gt 10 ]; then
                 print_colored "${RED}" "$(get_string not_debian_based)"
                 exit 1
             fi
@@ -563,6 +616,9 @@ check_system() {
                     exit 1
                     ;;
             esac
+            ;;
+        arch)
+            DISTRO_FAMILY=pacman
             ;;
         *)
             print_colored "${RED}" "$(get_string not_debian_based)"
@@ -595,6 +651,12 @@ check_arch() {
             exit 1
             ;;
     esac
+
+    if [ "$DISTRO_FAMILY" = pacman ] && [ "$ARCH" != amd64 ]; then
+        print_colored "${RED}" "$(get_string arch_linux_x86_only)"
+        print_colored "${RED}" "$(get_string detected_arch) $machine"
+        exit 1
+    fi
 
     print_colored "${GREEN}" "✓ $machine"
 }
@@ -750,6 +812,11 @@ download_packages() {
                 '.assets[] | select(((.name | endswith(".apk")) and (.name | test("^linux-cloud-bbrv3(-dev)?-"))) or (.name == $key)) | .browser_download_url' \
                 <<< "$release_json")
             ;;
+        pacman)
+            assets_json=$(jq -r \
+                '.assets[] | select(.name | test("^linux-cloud-bbrv3(-headers)?-[0-9].*-x86_64\\.pkg\\.tar\\.zst(\\.sig)?$")) | .browser_download_url' \
+                <<< "$release_json")
+            ;;
         *)
             assets_json=""
             ;;
@@ -786,7 +853,7 @@ download_packages() {
 }
 
 # Derive the exact kernel release, including CONFIG_LOCALVERSION, from the
-# downloaded DEB/RPM metadata or the installed Alpine kernel metadata.
+# downloaded package metadata or installed package metadata.
 detect_kernel_release() {
     KERNEL_RELEASE=""
 
@@ -816,6 +883,16 @@ detect_kernel_release() {
         apk)
             if [ -r /usr/share/kernel/cloud-bbrv3/kernel.release ]; then
                 KERNEL_RELEASE=$(cat /usr/share/kernel/cloud-bbrv3/kernel.release)
+            fi
+            ;;
+        pacman)
+            local main_arch_package=""
+            main_arch_package=$(find "$DOWNLOAD_DIR" \
+                -name 'linux-cloud-bbrv3-[0-9]*.pkg.tar.zst' | sort | sed -n '1p')
+            if [ -n "$main_arch_package" ]; then
+                KERNEL_RELEASE=$(bsdtar -tf "$main_arch_package" \
+                    | sed -n 's#^\(\./\)\?usr/lib/modules/\([^/]*\)/pkgbase$#\2#p' \
+                    | sed -n '1p')
             fi
             ;;
     esac
@@ -902,6 +979,15 @@ install_packages() {
             fi
             detect_kernel_release
             ;;
+        pacman)
+            local arch_packages=()
+            mapfile -t arch_packages < <(find "$DOWNLOAD_DIR" -name '*.pkg.tar.zst' | sort)
+            if [ "${#arch_packages[@]}" -eq 0 ] || \
+               ! run_as_root pacman -U --noconfirm "${arch_packages[@]}"; then
+                print_colored "${RED}" "$(get_string install_failed)"
+                exit 1
+            fi
+            ;;
     esac
 
     print_colored "${GREEN}" "$(get_string install_success)"
@@ -910,6 +996,7 @@ install_packages() {
     case "$DISTRO_FAMILY" in
         deb|rpm) boot_image="/boot/vmlinuz-${KERNEL_RELEASE}" ;;
         apk) boot_image=/boot/vmlinuz-cloud-bbrv3 ;;
+        pacman) boot_image=/boot/vmlinuz-linux-cloud-bbrv3 ;;
     esac
     if [ -n "$KERNEL_RELEASE" ] && [ -e "$boot_image" ]; then
         print_colored "${GREEN}" "✓ $(get_string boot_entry_found) $boot_image"

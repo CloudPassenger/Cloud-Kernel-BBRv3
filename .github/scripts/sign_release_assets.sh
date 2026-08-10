@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sign release RPMs and the checksum manifest with a protected OpenPGP key.
+# Sign release RPMs, Arch packages, and the checksum manifest with OpenPGP.
 set -euo pipefail
 
 usage() {
@@ -58,6 +58,9 @@ fi
 
 public_key=$assets_dir/cloud-kernel-signing.asc
 gpg --batch --armor --export "$expected_fingerprint" > "$public_key"
+gpg --batch --no-default-keyring \
+  --keyring "$gnupg_home/release-keyring.gpg" \
+  --import "$public_key"
 
 rpm_sign_args=(
   --define "_openpgp_sign_id $expected_fingerprint"
@@ -84,6 +87,19 @@ for package in "${rpm_packages[@]}"; do
   rpmkeys --dbpath "$rpm_db" --checksig "$package"
 done
 
+arch_packages=("$assets_dir"/*.pkg.tar.zst)
+for package in "${arch_packages[@]}"; do
+  package_signature=$package.sig
+  rm -f "$package_signature"
+  gpg "${gpg_args[@]}" \
+    --local-user "$expected_fingerprint" \
+    --detach-sign \
+    --output "$package_signature" \
+    "$package"
+  gpgv --keyring "$gnupg_home/release-keyring.gpg" \
+    "$package_signature" "$package"
+done
+
 manifest=$assets_dir/SHA256SUMS
 signature=$assets_dir/SHA256SUMS.asc
 rm -f "$manifest" "$signature"
@@ -106,10 +122,7 @@ gpg "${gpg_args[@]}" \
   --output "$signature" \
   "$manifest"
 
-gpg --batch --no-default-keyring \
-  --keyring "$gnupg_home/release-keyring.gpg" \
-  --import "$public_key"
 gpgv --keyring "$gnupg_home/release-keyring.gpg" "$signature" "$manifest"
 
-printf 'Signed %d RPM package(s) and release manifest with %s\n' \
-  "${#rpm_packages[@]}" "$expected_fingerprint"
+printf 'Signed %d RPM package(s), %d Arch package(s), and the release manifest with %s\n' \
+  "${#rpm_packages[@]}" "${#arch_packages[@]}" "$expected_fingerprint"

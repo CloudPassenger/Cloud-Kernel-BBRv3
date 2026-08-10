@@ -49,7 +49,7 @@ This repository builds multiple package formats from one identically patched and
 - Integrated **TCP Brutal** multiplexing (mux) congestion control algorithm from apernet (from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
 - Uses the upstream **EEVDF** fair scheduler by default without third-party Scheduler patches
 - Multi-architecture support (x86_64 & arm64), daily automatic builds tracking updates
-- Generic package support: build one RPM set and one APK set, then validate their install/remove lifecycle across distribution matrices
+- Generic package support: build one RPM set and one APK set, add one Arch Linux pacman package set for x86_64, then validate install/remove lifecycles in containers
 
 ## 🚀 Key Features
 
@@ -65,9 +65,9 @@ This repository builds multiple package formats from one identically patched and
 | Driver Trim        | Unused NIC vendor drivers stripped to reduce kernel size              |
 | Kernel Suffix      | `-cloudy` by default (`CONFIG_LOCALVERSION`) to avoid stock conflicts |
 | Architecture       | x86_64 (amd64) & arm64 (aarch64)                                      |
-| Package Formats    | Debian/Ubuntu `.deb`, generic Fedora/EL `.rpm`, generic Alpine `.apk` |
+| Package Formats    | Debian/Ubuntu `.deb`, generic Fedora/EL `.rpm`, generic Alpine `.apk`, Arch Linux `.pkg.tar.zst` (x86_64 only) |
 | Build Frequency    | Daily automatic builds + manual trigger support                        |
-| Release Signing    | Native OpenPGP RPM signatures, native RSA APK signatures, and a signed SHA-256 manifest for every release asset |
+| Release Signing    | Native OpenPGP RPM signatures, native RSA APK signatures, detached OpenPGP Arch package signatures, and a signed SHA-256 manifest for every release asset |
 
 ## 📥 Installation Guide
 
@@ -110,13 +110,14 @@ Script parameters:
 
 ### Pre-built Packages
 
-Every architecture-specific release contains three package formats. The generic RPM is built once on Rocky Linux 9 and validated unchanged on Fedora 43/44 and Enterprise Linux 9/10. The generic APK is built once on Alpine 3.21 and validated unchanged on Alpine 3.21-3.24. RPMs carry native OpenPGP signatures, APKs use one persistent Alpine RSA key, and `SHA256SUMS.asc` covers every release asset. The installer verifies signatures and checksums before invoking a package manager.
+x86_64 releases contain four package formats; arm64 releases contain DEB, RPM, and APK packages. The generic RPM is built once on Rocky Linux 9 and validated unchanged on Fedora 43/44 and Enterprise Linux 9/10. The generic APK is built once on Alpine 3.21 and validated unchanged on Alpine 3.21-3.24. Arch Linux packages are built and validated with the official `archlinux:base-devel` environment. RPMs carry native OpenPGP signatures, APKs use one persistent Alpine RSA key, each Arch package has a detached `.sig` from the release OpenPGP key, and `SHA256SUMS.asc` covers every release asset. The installer verifies signatures and checksums before invoking a package manager.
 
 | System | Package | Supported releases |
 |---|---|---|
 | Debian / Ubuntu | `.deb` | Debian 11+, Ubuntu 20.04+ |
 | Fedora / Enterprise Linux | generic `.rpm` | Fedora 43/44, EL 9/10 |
 | Alpine Linux | generic `.apk` | Alpine 3.21/3.22/3.23/3.24 |
+| Arch Linux | `.pkg.tar.zst` | Official Arch Linux x86_64 rolling release |
 
 Download the packages for the current architecture from [Releases](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/releases), then install them:
 
@@ -130,11 +131,18 @@ sudo dnf install ./kernel-cloud-bbrv3-[0-9]*.rpm ./kernel-cloud-bbrv3-devel-*.rp
 # Alpine Linux (install Bash before using the one-click installer)
 sudo cp ./*.rsa.pub /etc/apk/keys/
 sudo apk add ./linux-cloud-bbrv3-[0-9]*.apk ./linux-cloud-bbrv3-dev-*.apk
+
+# Arch Linux (x86_64 only; fully upgrade the system first)
+sudo pacman -Syu
+sudo pacman -U ./linux-cloud-bbrv3-[0-9]*.pkg.tar.zst ./linux-cloud-bbrv3-headers-*.pkg.tar.zst
 ```
 
-Before manual installation, verify `SHA256SUMS.asc` with `cloud-kernel-signing.asc`, then verify the downloaded files. RPM signatures can additionally be checked with `rpmkeys --checksig`; APK installs use the stable `cloud-kernel-bbrv3.rsa.pub` key published in the release. The one-click installer performs these checks automatically.
+Before manual installation, verify `SHA256SUMS.asc` with `cloud-kernel-signing.asc`, then verify the downloaded files. RPM signatures can additionally be checked with `rpmkeys --checksig`; APK installs use the stable `cloud-kernel-bbrv3.rsa.pub` key published in the release; every Arch Linux `.pkg.tar.zst` must verify against its detached `.sig`. The one-click installer performs these checks automatically.
 
-RPM and APK packages do not currently support Secure Boot. Keep the distribution kernel installed as a recovery option.
+> [!NOTE]
+> This VPS-oriented configuration intentionally disables USB/HID. Arch Linux's default `mkinitcpio` `keyboard` hook may report a missing `usbhid` module; the initramfs is still generated, but this kernel is unsuitable for machines that need a USB keyboard for disk-unlock input or local recovery.
+
+RPM, APK, and Arch Linux packages do not currently support Secure Boot. Keep the distribution kernel installed as a recovery option. The Arch installer does not run an unsafe partial `pacman -Sy` upgrade; run `sudo pacman -Syu` first when the system is not fully current.
 
 ### Verify Installation
 
@@ -161,7 +169,7 @@ To build manually using GitHub Actions:
 3. Click **Run workflow**
 4. Enter a full kernel version (e.g. `6.18.15`) and select the target architecture
 5. Optional: adjust the **Kernel suffix** input to customize the suffix (defaults to `cloudy`; leave empty to build without one)
-6. The workflow compiles one generic RPM set and one generic APK set; compatibility matrices reuse those exact artifacts instead of rebuilding the kernel per distribution
+6. The workflow compiles one generic RPM set, one generic APK set, and one Arch Linux package set on x86_64; compatibility validation reuses those exact artifacts instead of rebuilding the kernel per distribution
 
 ### Release signing configuration
 

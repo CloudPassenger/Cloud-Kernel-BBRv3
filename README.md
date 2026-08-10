@@ -49,25 +49,25 @@
 - 内置 **TCP Brutal** 多路复用拥塞控制算法 (来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
 - 使用上游 **EEVDF** 公平调度器，默认启用且不引入第三方 Scheduler 补丁
 - 多架构支持 (x86_64 & arm64)，每日自动构建跟踪更新
-- 通用包支持：单次构建 generic RPM 与 generic APK，再通过多发行版容器矩阵验证安装和卸载生命周期
+- 通用包支持：单次构建 generic RPM 与 generic APK，并为 x86_64 构建 Arch Linux pacman 包，再通过容器验证安装和卸载生命周期
 
 ## 🚀 核心特性
 
-| 组件               | 详细信息                                                               |
-|--------------------|-----------------------------------------------------------------------|
-| 内核基础           | 6.12 / 6.18 / 7.1 系列 + Debian 团队补丁                                |
-| 网络优化           | BBRv3（内置默认）/ BBRPlus / BBRv1 / Brutal（模块）+ 默认 `sch_fq` qdisc |
-| CPU 调度器         | 上游 EEVDF 公平调度器                                                    |
-| 内存策略           | THP `madvise`、关闭 autogroup 与 NUMA 默认均衡                          |
-| CPU 规模 (x86)     | `NR_CPUS=512`、关闭 `MAXSMP`，适配 VPS 规模                             |
-| 安全加固           | 保留 `LIST_HARDENED`；x86 按策略关闭 CPU 漏洞缓解                       |
-| ZRAM 交换          | 多压缩算法支持（LZO + ZSTD）                                            |
-| 驱动精简           | 裁剪未用网卡厂商驱动，减小内核体积                                       |
-| 内核后缀           | 默认 `-cloudy`（`CONFIG_LOCALVERSION`），避免与官方内核冲突               |
-| 支持架构           | x86_64 (amd64) 和 arm64 (aarch64)                                      |
-| 软件包格式         | Debian/Ubuntu `.deb`、Fedora/EL generic `.rpm`、Alpine generic `.apk`   |
-| 构建频率           | 每日自动构建 + 支持手动触发                                              |
-| 发行签名           | RPM 原生 OpenPGP、APK 原生 RSA、全部 Release assets 的签名 SHA-256 清单 |
+| 组件　　　　　 | 详细信息　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　|
+| ----------------| ---------------------------------------------------------------------------------------------------------------|
+| 内核基础　　　 | 6.12 / 6.18 / 7.1 系列 + Debian 团队补丁　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　|
+| 网络优化　　　 | BBRv3（内置默认）/ BBRPlus / BBRv1 / Brutal（模块）+ 默认 `sch_fq` qdisc　　　　　　　　　　　　　　　　　　　|
+| CPU 调度器　　 | 上游 EEVDF 公平调度器　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 |
+| 内存策略　　　 | THP `madvise`、关闭 autogroup 与 NUMA 默认均衡　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　|
+| CPU 规模 (x86) | `NR_CPUS=512`、关闭 `MAXSMP`，适配 VPS 规模　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 |
+| 安全加固　　　 | 保留 `LIST_HARDENED`；x86 按策略关闭 CPU 漏洞缓解　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 |
+| ZRAM 交换　　　| 多压缩算法支持（LZO + ZSTD）　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　|
+| 驱动精简　　　 | 裁剪未用网卡厂商驱动，减小内核体积　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　|
+| 内核后缀　　　 | 默认 `-cloudy`（`CONFIG_LOCALVERSION`），避免与官方内核冲突　　　　　　　　　　　　　　　　　　　　　　　　　 |
+| 支持架构　　　 | x86_64 (amd64) 和 arm64 (aarch64)　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 |
+| 软件包格式　　 | Debian/Ubuntu `.deb`、Fedora/EL generic `.rpm`、Alpine generic `.apk`、Arch Linux `.pkg.tar.zst`（仅 x86_64） |
+| 构建频率　　　 | 每日自动构建 + 支持手动触发　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 |
+| 发行签名　　　 | RPM 原生 OpenPGP、APK 原生 RSA、Arch 软件包 detached OpenPGP、全部 Release assets 的签名 SHA-256 清单　　　　 |
 
 ## 📥 安装指南
 
@@ -110,13 +110,14 @@ export CLOUD_KERNEL_GPG_FINGERPRINT="<FULL_OPENPGP_FINGERPRINT>"
 
 ### 预构建软件包
 
-每个架构的 Release 同时提供三种软件包。generic RPM 由 Rocky Linux 9 构建，并原样验证于 Fedora 43/44 与 Enterprise Linux 9/10；generic APK 由 Alpine 3.21 构建，并原样验证于 Alpine 3.21-3.24。RPM 使用 OpenPGP 原生签名，APK 使用固定 Alpine RSA 密钥签名，所有 Release assets 同时由 `SHA256SUMS.asc` 覆盖。安装脚本在调用包管理器前强制验证签名和校验和。
+x86_64 Release 提供四种软件包，arm64 Release 提供 DEB、RPM 和 APK。generic RPM 由 Rocky Linux 9 构建，并原样验证于 Fedora 43/44 与 Enterprise Linux 9/10；generic APK 由 Alpine 3.21 构建，并原样验证于 Alpine 3.21-3.24；Arch Linux 包使用官方 `archlinux:base-devel` 环境构建并验证。RPM 使用 OpenPGP 原生签名，APK 使用固定 Alpine RSA 密钥签名，Arch 软件包使用同一 OpenPGP release key 生成 detached `.sig`，所有 Release assets 同时由 `SHA256SUMS.asc` 覆盖。安装脚本在调用包管理器前强制验证签名和校验和。
 
 | 系统 | 软件包 | 支持版本 |
 |---|---|---|
 | Debian / Ubuntu | `.deb` | Debian 11+、Ubuntu 20.04+ |
 | Fedora / Enterprise Linux | generic `.rpm` | Fedora 43/44、EL 9/10 |
 | Alpine Linux | generic `.apk` | Alpine 3.21/3.22/3.23/3.24 |
+| Arch Linux | `.pkg.tar.zst` | 官方 Arch Linux x86_64 rolling release |
 
 从 [发布页面](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/releases) 下载当前架构的软件包后安装：
 
@@ -130,11 +131,18 @@ sudo dnf install ./kernel-cloud-bbrv3-[0-9]*.rpm ./kernel-cloud-bbrv3-devel-*.rp
 # Alpine Linux（先安装 Bash 才能运行一键安装脚本）
 sudo cp ./*.rsa.pub /etc/apk/keys/
 sudo apk add ./linux-cloud-bbrv3-[0-9]*.apk ./linux-cloud-bbrv3-dev-*.apk
+
+# Arch Linux（仅 x86_64；安装前建议先完整升级系统）
+sudo pacman -Syu
+sudo pacman -U ./linux-cloud-bbrv3-[0-9]*.pkg.tar.zst ./linux-cloud-bbrv3-headers-*.pkg.tar.zst
 ```
 
-手动安装前应先使用 `cloud-kernel-signing.asc` 验证 `SHA256SUMS.asc`，再校验所下载文件。RPM 还可通过 `rpmkeys --checksig` 验证原生签名；APK 安装时会使用 Release 中固定名称的 `cloud-kernel-bbrv3.rsa.pub` 验证原生签名。一键安装脚本会自动执行这些步骤。
+手动安装前应先使用 `cloud-kernel-signing.asc` 验证 `SHA256SUMS.asc`，再校验所下载文件。RPM 还可通过 `rpmkeys --checksig` 验证原生签名；APK 安装时会使用 Release 中固定名称的 `cloud-kernel-bbrv3.rsa.pub` 验证原生签名；Arch Linux 的每个 `.pkg.tar.zst` 必须通过对应 detached `.sig` 验证。一键安装脚本会自动执行这些步骤。
 
-RPM 与 APK 当前不支持 Secure Boot；请保留发行版原有内核作为回退启动项。
+> [!NOTE]
+> 本项目面向 VPS，配置中有意禁用 USB/HID。Arch Linux 默认 `mkinitcpio` 的 `keyboard` hook 可能提示缺少 `usbhid`；initramfs 仍会生成，但需要 USB 键盘输入磁盘解锁密码或进行本地恢复的机器不应使用此内核。
+
+RPM、APK 与 Arch Linux 软件包当前不支持 Secure Boot；请保留发行版原有内核作为回退启动项。Arch Linux 安装器不会执行不安全的 `pacman -Sy` 部分升级；如果系统不是最新状态，请先手动执行 `sudo pacman -Syu`。
 
 ### 验证安装
 
@@ -161,7 +169,7 @@ sysctl net.ipv4.tcp_available_congestion_control  # 加载后应包含 bbr bbr1 
 3. 点击 **Run workflow**
 4. 输入完整的内核版本（如 `6.18.15`），选择目标架构
 5. 可选：修改 **Kernel suffix** 参数自定义内核后缀（默认 `cloudy`，留空则构建无后缀内核）
-6. 工作流只编译一套 generic RPM 和一套 generic APK；兼容性矩阵复用同一产物，不会为每个发行版重复编译内核
+6. 工作流编译一套 generic RPM、一套 generic APK，并在 x86_64 构建一套 Arch Linux 软件包；兼容性验证复用相同产物，不会按发行版重复编译内核
 
 ### 发行签名配置
 
