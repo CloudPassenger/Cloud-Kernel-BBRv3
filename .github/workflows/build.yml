@@ -513,6 +513,8 @@ jobs:
     name: Build Generic Alpine APKs for ${{ needs.prepare.outputs.arch }}
     runs-on: ${{ needs.prepare.outputs.runner }}
     needs: [prepare, prepare-source]
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'release-signing' || 'build-testing' }}
     steps:
       - name: Checkout Workflow Source Code
         uses: actions/checkout@v7
@@ -534,14 +536,39 @@ jobs:
 
       - name: Build Generic APK Packages
         env:
+          APK_SIGNING_PRIVATE_KEY_B64: ${{ secrets.APK_SIGNING_PRIVATE_KEY_B64 }}
           DIAGNOSTIC_BUILD: ${{ needs.prepare.outputs.diagnostic_build }}
+          REQUIRE_PERSISTENT_SIGNING: ${{ github.ref == 'refs/heads/main' }}
         run: |
+          signing_dir="$RUNNER_TEMP/cloud-kernel-apk-signing"
+          mkdir -p "$signing_dir"
+          chmod 700 "$signing_dir"
+          trap 'rm -rf "$signing_dir"' EXIT
+
+          private_key_path=""
+          if [ -n "$APK_SIGNING_PRIVATE_KEY_B64" ]; then
+            private_key_path="$signing_dir/cloud-kernel-bbrv3.rsa"
+            printf '%s' "$APK_SIGNING_PRIVATE_KEY_B64" | base64 --decode > "$private_key_path"
+            chmod 600 "$private_key_path"
+          fi
+
           run_apk_build() {
-            docker run --rm \
-              --volume "$GITHUB_WORKSPACE:/workspace" \
-              --workdir /workspace \
-              --env CCACHE_DIR="/workspace/.ccache/apk/generic-${{ needs.prepare.outputs.arch }}" \
-              --env DIAGNOSTIC_BUILD="$DIAGNOSTIC_BUILD" \
+            docker_args=(
+              --rm
+              --volume "$GITHUB_WORKSPACE:/workspace"
+              --workdir /workspace
+              --env CCACHE_DIR="/workspace/.ccache/apk/generic-${{ needs.prepare.outputs.arch }}"
+              --env DIAGNOSTIC_BUILD="$DIAGNOSTIC_BUILD"
+              --env REQUIRE_PERSISTENT_SIGNING="$REQUIRE_PERSISTENT_SIGNING"
+            )
+            if [ -n "$private_key_path" ]; then
+              docker_args+=(
+                --volume "$private_key_path:/run/secrets/cloud-kernel-bbrv3.rsa:ro"
+                --env APK_SIGNING_PRIVATE_KEY_FILE=/run/secrets/cloud-kernel-bbrv3.rsa
+              )
+            fi
+
+            docker run "${docker_args[@]}" \
               alpine:3.21 \
               sh -c 'apk add --no-cache bash coreutils && exec bash .github/scripts/build_apk.sh "$@"' -- \
                 "${{ needs.prepare.outputs.kernel_version }}" \
@@ -658,7 +685,12 @@ jobs:
     needs: [prepare, build-deb, build-rpm, validate-rpm, build-apk, validate-apk]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    environment: release-signing
+    permissions:
+      contents: write
     steps:
+      - name: Checkout Workflow Source Code
+        uses: actions/checkout@v7
       - name: Download Package Artifacts
         uses: actions/download-artifact@v8
         with:
@@ -668,6 +700,48 @@ jobs:
 
       - name: Remove Debian Debug Package
         run: find release-assets -type f -name 'linux-image-*-dbg_*.deb' -delete
+
+      - name: Sign Release Assets
+        env:
+          PACKAGE_SIGNING_GPG_FINGERPRINT: ${{ vars.PACKAGE_SIGNING_GPG_FINGERPRINT }}
+          PACKAGE_SIGNING_GPG_PASSPHRASE: ${{ secrets.PACKAGE_SIGNING_GPG_PASSPHRASE }}
+          PACKAGE_SIGNING_GPG_PRIVATE_KEY_B64: ${{ secrets.PACKAGE_SIGNING_GPG_PRIVATE_KEY_B64 }}
+        run: |
+          if [ -z "$PACKAGE_SIGNING_GPG_PRIVATE_KEY_B64" ]; then
+            echo "PACKAGE_SIGNING_GPG_PRIVATE_KEY_B64 is not configured" >&2
+            exit 1
+          fi
+          if [ -z "$PACKAGE_SIGNING_GPG_FINGERPRINT" ]; then
+            echo "PACKAGE_SIGNING_GPG_FINGERPRINT is not configured" >&2
+            exit 1
+          fi
+
+          sudo apt-get update
+          sudo apt-get install -y gnupg rpm
+
+          signing_dir="$RUNNER_TEMP/cloud-kernel-release-signing"
+          mkdir -p "$signing_dir"
+          chmod 700 "$signing_dir"
+          trap 'rm -rf "$signing_dir"' EXIT
+
+          private_key="$signing_dir/openpgp-private-key.asc"
+          printf '%s' "$PACKAGE_SIGNING_GPG_PRIVATE_KEY_B64" \
+            | base64 --decode > "$private_key"
+          chmod 600 "$private_key"
+
+          signing_args=(
+            release-assets
+            "$private_key"
+            "$PACKAGE_SIGNING_GPG_FINGERPRINT"
+          )
+          if [ -n "$PACKAGE_SIGNING_GPG_PASSPHRASE" ]; then
+            passphrase_file="$signing_dir/openpgp-passphrase"
+            printf '%s' "$PACKAGE_SIGNING_GPG_PASSPHRASE" > "$passphrase_file"
+            chmod 600 "$passphrase_file"
+            signing_args+=("$passphrase_file")
+          fi
+
+          .github/scripts/sign_release_assets.sh "${signing_args[@]}"
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
@@ -689,6 +763,8 @@ jobs:
             - **Kernel suffix (LOCALVERSION):** `${{ needs.prepare.outputs.localversion_display }}`
             - **Package targets:** Debian/Ubuntu `.deb`, generic Fedora/Enterprise Linux `.rpm`, generic Alpine Linux `.apk`
             - **Validated targets:** Fedora 43/44, Enterprise Linux 9/10, Alpine Linux 3.21/3.22/3.23/3.24
+            - **OpenPGP signing fingerprint:** `${{ vars.PACKAGE_SIGNING_GPG_FINGERPRINT }}`
+            - **Signature files:** `SHA256SUMS`, `SHA256SUMS.asc`, and `cloud-kernel-signing.asc`
             - **Applied patches:**
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
@@ -723,6 +799,8 @@ jobs:
             - **内核后缀 (LOCALVERSION)：** `${{ needs.prepare.outputs.localversion_display }}`
             - **软件包目标：** Debian/Ubuntu `.deb`、通用 Fedora/Enterprise Linux `.rpm`、通用 Alpine Linux `.apk`
             - **验证目标：** Fedora 43/44、Enterprise Linux 9/10、Alpine Linux 3.21/3.22/3.23/3.24
+            - **OpenPGP 签名指纹：** `${{ vars.PACKAGE_SIGNING_GPG_FINGERPRINT }}`
+            - **签名文件：** `SHA256SUMS`、`SHA256SUMS.asc` 和 `cloud-kernel-signing.asc`
             - **应用补丁：**
               - `Debian 补丁集合`（来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/)）
               - `BBR V3`（来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches)）
@@ -751,3 +829,5 @@ jobs:
             release-assets/*.rpm
             release-assets/*.apk
             release-assets/*.rsa.pub
+            release-assets/*.asc
+            release-assets/SHA256SUMS

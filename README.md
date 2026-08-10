@@ -67,6 +67,7 @@
 | 支持架构           | x86_64 (amd64) 和 arm64 (aarch64)                                      |
 | 软件包格式         | Debian/Ubuntu `.deb`、Fedora/EL generic `.rpm`、Alpine generic `.apk`   |
 | 构建频率           | 每日自动构建 + 支持手动触发                                              |
+| 发行签名           | RPM 原生 OpenPGP、APK 原生 RSA、全部 Release assets 的签名 SHA-256 清单 |
 
 ## 📥 安装指南
 
@@ -78,6 +79,9 @@
 # 下载安装脚本
 wget https://raw.githubusercontent.com/CloudPassenger/Cloud-Kernel-BBRv3/main/install-kernel.sh
 chmod +x install-kernel.sh
+
+# 设置从可信渠道获得的完整 OpenPGP 指纹
+export CLOUD_KERNEL_GPG_FINGERPRINT="<FULL_OPENPGP_FINGERPRINT>"
 
 # 交互式安装（推荐新用户使用）
 ./install-kernel.sh
@@ -102,10 +106,11 @@ chmod +x install-kernel.sh
   - `-s, --series, --kernel-series`：选择内核系列（`6.12`、`6.18` 或 `7.1`）
   - `-v, --version`：指定完整的内核版本；省略系列时会根据版本号自动推断
   - `-a, --no-reboot`：安装后不自动重启
+  - `--signing-fingerprint`：指定可信 OpenPGP 完整指纹；也可设置 `CLOUD_KERNEL_GPG_FINGERPRINT`
 
 ### 预构建软件包
 
-每个架构的 Release 同时提供三种软件包。generic RPM 由 Rocky Linux 9 构建，并原样验证于 Fedora 43/44 与 Enterprise Linux 9/10；generic APK 由 Alpine 3.21 构建，并原样验证于 Alpine 3.21-3.24。
+每个架构的 Release 同时提供三种软件包。generic RPM 由 Rocky Linux 9 构建，并原样验证于 Fedora 43/44 与 Enterprise Linux 9/10；generic APK 由 Alpine 3.21 构建，并原样验证于 Alpine 3.21-3.24。RPM 使用 OpenPGP 原生签名，APK 使用固定 Alpine RSA 密钥签名，所有 Release assets 同时由 `SHA256SUMS.asc` 覆盖。安装脚本在调用包管理器前强制验证签名和校验和。
 
 | 系统 | 软件包 | 支持版本 |
 |---|---|---|
@@ -126,6 +131,8 @@ sudo dnf install ./kernel-cloud-bbrv3-[0-9]*.rpm ./kernel-cloud-bbrv3-devel-*.rp
 sudo cp ./*.rsa.pub /etc/apk/keys/
 sudo apk add ./linux-cloud-bbrv3-[0-9]*.apk ./linux-cloud-bbrv3-dev-*.apk
 ```
+
+手动安装前应先使用 `cloud-kernel-signing.asc` 验证 `SHA256SUMS.asc`，再校验所下载文件。RPM 还可通过 `rpmkeys --checksig` 验证原生签名；APK 安装时会使用 Release 中固定名称的 `cloud-kernel-bbrv3.rsa.pub` 验证原生签名。一键安装脚本会自动执行这些步骤。
 
 RPM 与 APK 当前不支持 Secure Boot；请保留发行版原有内核作为回退启动项。
 
@@ -155,6 +162,17 @@ sysctl net.ipv4.tcp_available_congestion_control  # 加载后应包含 bbr bbr1 
 4. 输入完整的内核版本（如 `6.18.15`），选择目标架构
 5. 可选：修改 **Kernel suffix** 参数自定义内核后缀（默认 `cloudy`，留空则构建无后缀内核）
 6. 工作流只编译一套 generic RPM 和一套 generic APK；兼容性矩阵复用同一产物，不会为每个发行版重复编译内核
+
+### 发行签名配置
+
+仓库管理员需要创建受保护的 GitHub Environment `release-signing`，只允许 `main`/发行标签，并建议启用 Required reviewers 和 Prevent self-review。配置：
+
+- Environment secret `PACKAGE_SIGNING_GPG_PRIVATE_KEY_B64`：Base64 编码的 OpenPGP CI signing subkey
+- 可选 Environment secret `PACKAGE_SIGNING_GPG_PASSPHRASE`：signing subkey 密码
+- Environment secret `APK_SIGNING_PRIVATE_KEY_B64`：Base64 编码的 Alpine RSA 私钥
+- Environment variable `PACKAGE_SIGNING_GPG_FINGERPRINT`：OpenPGP 主密钥完整指纹
+
+OpenPGP 主密钥应离线保存，只向 CI 导出可撤销、可过期的 signing subkey。Alpine 使用独立 RSA 密钥。`main` 上缺少持久私钥时工作流会失败，不会发布临时签名或未签名产物；非 `main` 测试构建仍可使用临时 APK 密钥。
 
 ## 🤝 参与贡献
 

@@ -43,6 +43,25 @@ if [ ! -f "$source_archive" ]; then
   exit 1
 fi
 
+input_private_key=${APK_SIGNING_PRIVATE_KEY_FILE:-}
+input_public_key=${APK_SIGNING_PUBLIC_KEY_FILE:-}
+require_persistent_signing=${REQUIRE_PERSISTENT_SIGNING:-false}
+case "$require_persistent_signing" in
+  true|false) ;;
+  *)
+    printf 'error: REQUIRE_PERSISTENT_SIGNING must be true or false\n' >&2
+    exit 1
+    ;;
+esac
+if [ "$require_persistent_signing" = true ] && [ -z "$input_private_key" ]; then
+  printf 'error: persistent Alpine signing key is required for this build\n' >&2
+  exit 1
+fi
+if [ -n "$input_public_key" ] && [ -z "$input_private_key" ]; then
+  printf 'error: APK_SIGNING_PUBLIC_KEY_FILE requires APK_SIGNING_PRIVATE_KEY_FILE\n' >&2
+  exit 1
+fi
+
 apk add \
   alpine-sdk argp-standalone bash bc binutils bison bpftool ccache cmake \
   diffutils doas elfutils-dev findutils flex gawk git gmp-dev installkernel \
@@ -88,14 +107,55 @@ export CCACHE_DIR=${CCACHE_DIR:-$repo_root/.ccache/apk/$build_id-$arch_arg}
 mkdir -p "$CCACHE_DIR"
 chown -R builder:abuild "$CCACHE_DIR"
 
-su builder -c "abuild-keygen -a -n"
-find /home/builder/.abuild -type f -name '*.rsa.pub' \
-  -exec install -m 0644 {} /etc/apk/keys/ \;
 su builder -c "cd '$package_dir' && CCACHE_DIR='$CCACHE_DIR' abuild checksum"
-su builder -c "cd '$package_dir' && CCACHE_DIR='$CCACHE_DIR' abuild -r"
+su builder -c "cd '$package_dir' && CCACHE_DIR='$CCACHE_DIR' abuild -r validate clean fetch unpack prepare build"
+
+signing_private_key=/home/builder/.abuild/cloud-kernel-bbrv3.rsa
+signing_public_key=$signing_private_key.pub
+
+if [ -n "$input_private_key" ]; then
+  if [ ! -s "$input_private_key" ]; then
+    printf 'error: persistent APK signing private key is missing\n' >&2
+    exit 1
+  fi
+
+  install -m 0600 "$input_private_key" "$signing_private_key"
+  openssl pkey -in "$signing_private_key" -pubout -out "$signing_public_key"
+  if [ -n "$input_public_key" ]; then
+    if [ ! -s "$input_public_key" ]; then
+      printf 'error: persistent APK signing public key is missing\n' >&2
+      exit 1
+    fi
+    if ! cmp -s "$signing_public_key" "$input_public_key"; then
+      printf 'error: Alpine signing public key does not match the private key\n' >&2
+      exit 1
+    fi
+  fi
+  chown builder:abuild "$signing_private_key" "$signing_public_key"
+elif [ -n "$input_public_key" ]; then
+  printf 'error: APK_SIGNING_PUBLIC_KEY_FILE requires APK_SIGNING_PRIVATE_KEY_FILE\n' >&2
+  exit 1
+else
+  if [ "$require_persistent_signing" = true ]; then
+    printf 'error: persistent Alpine signing key is required for this build\n' >&2
+    exit 1
+  fi
+  su builder -c "abuild-keygen -n -b 4096"
+  generated_private_keys=(/home/builder/.abuild/*.rsa)
+  if [ "${#generated_private_keys[@]}" -ne 1 ] || [ ! -f "${generated_private_keys[0]}" ]; then
+    printf 'error: failed to locate generated Alpine signing key\n' >&2
+    exit 1
+  fi
+  mv "${generated_private_keys[0]}" "$signing_private_key"
+  mv "${generated_private_keys[0]}.pub" "$signing_public_key"
+  chown builder:abuild "$signing_private_key" "$signing_public_key"
+fi
+
+install -m 0644 "$signing_public_key" "/etc/apk/keys/$(basename "$signing_public_key")"
+su builder -c "cd '$package_dir' && CCACHE_DIR='$CCACHE_DIR' PACKAGER_PRIVKEY='$signing_private_key' abuild rootpkg"
 
 find /home/builder/packages -type f -name '*.apk' -exec cp -v {} "$output_dir"/ \;
-find /home/builder/.abuild -type f -name '*.rsa.pub' -exec cp -v {} "$output_dir"/ \;
+cp -v "$signing_public_key" "$output_dir"/
 
 apk_version=$(apk --version)
 printf 'Built with %s\n' "$apk_version"

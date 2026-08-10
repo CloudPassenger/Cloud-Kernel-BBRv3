@@ -67,6 +67,7 @@ This repository builds multiple package formats from one identically patched and
 | Architecture       | x86_64 (amd64) & arm64 (aarch64)                                      |
 | Package Formats    | Debian/Ubuntu `.deb`, generic Fedora/EL `.rpm`, generic Alpine `.apk` |
 | Build Frequency    | Daily automatic builds + manual trigger support                        |
+| Release Signing    | Native OpenPGP RPM signatures, native RSA APK signatures, and a signed SHA-256 manifest for every release asset |
 
 ## 📥 Installation Guide
 
@@ -78,6 +79,9 @@ Use the one-click installer to install the latest kernel within a selected serie
 # Download the installation script
 wget https://raw.githubusercontent.com/CloudPassenger/Cloud-Kernel-BBRv3/main/install-kernel.sh
 chmod +x install-kernel.sh
+
+# Set the full OpenPGP fingerprint obtained through a trusted channel
+export CLOUD_KERNEL_GPG_FINGERPRINT="<FULL_OPENPGP_FINGERPRINT>"
 
 # Interactive installation (recommended for new users)
 ./install-kernel.sh
@@ -102,10 +106,11 @@ Script parameters:
   - `-s, --series, --kernel-series`: Select a kernel series (`6.12`, `6.18`, or `7.1`)
   - `-v, --version`: Specify a full kernel version; the series is inferred when omitted
   - `-a, --no-reboot`: Skip reboot after installation
+  - `--signing-fingerprint`: Set the trusted full OpenPGP fingerprint; `CLOUD_KERNEL_GPG_FINGERPRINT` is also supported
 
 ### Pre-built Packages
 
-Every architecture-specific release contains three package formats. The generic RPM is built once on Rocky Linux 9 and validated unchanged on Fedora 43/44 and Enterprise Linux 9/10. The generic APK is built once on Alpine 3.21 and validated unchanged on Alpine 3.21-3.24.
+Every architecture-specific release contains three package formats. The generic RPM is built once on Rocky Linux 9 and validated unchanged on Fedora 43/44 and Enterprise Linux 9/10. The generic APK is built once on Alpine 3.21 and validated unchanged on Alpine 3.21-3.24. RPMs carry native OpenPGP signatures, APKs use one persistent Alpine RSA key, and `SHA256SUMS.asc` covers every release asset. The installer verifies signatures and checksums before invoking a package manager.
 
 | System | Package | Supported releases |
 |---|---|---|
@@ -126,6 +131,8 @@ sudo dnf install ./kernel-cloud-bbrv3-[0-9]*.rpm ./kernel-cloud-bbrv3-devel-*.rp
 sudo cp ./*.rsa.pub /etc/apk/keys/
 sudo apk add ./linux-cloud-bbrv3-[0-9]*.apk ./linux-cloud-bbrv3-dev-*.apk
 ```
+
+Before manual installation, verify `SHA256SUMS.asc` with `cloud-kernel-signing.asc`, then verify the downloaded files. RPM signatures can additionally be checked with `rpmkeys --checksig`; APK installs use the stable `cloud-kernel-bbrv3.rsa.pub` key published in the release. The one-click installer performs these checks automatically.
 
 RPM and APK packages do not currently support Secure Boot. Keep the distribution kernel installed as a recovery option.
 
@@ -155,6 +162,17 @@ To build manually using GitHub Actions:
 4. Enter a full kernel version (e.g. `6.18.15`) and select the target architecture
 5. Optional: adjust the **Kernel suffix** input to customize the suffix (defaults to `cloudy`; leave empty to build without one)
 6. The workflow compiles one generic RPM set and one generic APK set; compatibility matrices reuse those exact artifacts instead of rebuilding the kernel per distribution
+
+### Release signing configuration
+
+Repository administrators must create a protected GitHub Environment named `release-signing`, restrict it to `main`/release tags, and preferably enable Required reviewers and Prevent self-review. Configure:
+
+- Environment secret `PACKAGE_SIGNING_GPG_PRIVATE_KEY_B64`: Base64-encoded OpenPGP CI signing subkey
+- Optional Environment secret `PACKAGE_SIGNING_GPG_PASSPHRASE`: signing-subkey passphrase
+- Environment secret `APK_SIGNING_PRIVATE_KEY_B64`: Base64-encoded Alpine RSA private key
+- Environment variable `PACKAGE_SIGNING_GPG_FINGERPRINT`: full OpenPGP primary-key fingerprint
+
+Keep the OpenPGP primary key offline and export only a revocable, expiring signing subkey to CI. Alpine uses a separate RSA key. A `main` build fails rather than publishing ephemeral or unsigned artifacts when persistent keys are unavailable; non-`main` test builds may still use an ephemeral APK key.
 
 ## 🤝 Contributing
 

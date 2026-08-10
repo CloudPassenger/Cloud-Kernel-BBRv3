@@ -32,6 +32,11 @@ DISTRO_ID=""
 DISTRO_FAMILY=""
 DISTRO_VERSION_MAJOR=""
 RPM_ARCH=""
+TRUSTED_GPG_FINGERPRINT=${CLOUD_KERNEL_GPG_FINGERPRINT:-}
+SIGNING_PUBLIC_KEY_NAME="cloud-kernel-signing.asc"
+APK_PUBLIC_KEY_NAME="cloud-kernel-bbrv3.rsa.pub"
+CHECKSUM_MANIFEST_NAME="SHA256SUMS"
+CHECKSUM_SIGNATURE_NAME="SHA256SUMS.asc"
 
 # Text colors
 RED='\033[0;31m'
@@ -85,6 +90,11 @@ STRINGS[en,created_dir]="Created download directory:"
 STRINGS[en,downloading_file]="Downloading:"
 STRINGS[en,download_success]="Successfully downloaded all kernel packages."
 STRINGS[en,download_failed]="Failed to download one or more kernel packages."
+STRINGS[en,verifying_downloads]="Verifying release signatures and checksums..."
+STRINGS[en,verification_success]="Release signatures and checksums verified successfully."
+STRINGS[en,verification_failed]="Release signature or checksum verification failed."
+STRINGS[en,fingerprint_required]="Error: A trusted signing fingerprint is required. Use --signing-fingerprint or CLOUD_KERNEL_GPG_FINGERPRINT."
+STRINGS[en,fingerprint_mismatch]="Error: The release signing key fingerprint does not match the trusted fingerprint."
 STRINGS[en,installing]="Installing kernel packages..."
 STRINGS[en,install_success]="Kernel installation completed successfully!"
 STRINGS[en,install_failed]="Kernel installation failed."
@@ -114,6 +124,7 @@ STRINGS[en,help_install_options]="Options for 'install' command:"
 STRINGS[en,help_series]="  -s, --series, --kernel-series    Select kernel series (6.12/6.18/7.1; default: 7.1)"
 STRINGS[en,help_version]="  -v, --version     Specify full kernel version (infers series when -s is omitted)"
 STRINGS[en,help_no_reboot]="  -a, --no-reboot   Skip reboot after installation"
+STRINGS[en,help_signing_fingerprint]="      --signing-fingerprint    Trusted OpenPGP signing-key fingerprint"
 STRINGS[en,help_examples]="Examples:"
 STRINGS[en,help_example1]="  Install the latest kernel from the 6.18 series with English interface:"
 STRINGS[en,help_example2]="  Install a specific kernel version without reboot:"
@@ -156,6 +167,11 @@ STRINGS[zh,created_dir]="已创建下载目录："
 STRINGS[zh,downloading_file]="正在下载："
 STRINGS[zh,download_success]="成功下载所有内核包。"
 STRINGS[zh,download_failed]="下载一个或多个内核包失败。"
+STRINGS[zh,verifying_downloads]="正在验证发行签名和校验和..."
+STRINGS[zh,verification_success]="发行签名和校验和验证成功。"
+STRINGS[zh,verification_failed]="发行签名或校验和验证失败。"
+STRINGS[zh,fingerprint_required]="错误：必须提供可信签名指纹。请使用 --signing-fingerprint 或 CLOUD_KERNEL_GPG_FINGERPRINT。"
+STRINGS[zh,fingerprint_mismatch]="错误：发行签名密钥指纹与可信指纹不匹配。"
 STRINGS[zh,installing]="正在安装内核包..."
 STRINGS[zh,install_success]="内核安装成功完成！"
 STRINGS[zh,install_failed]="内核安装失败。"
@@ -185,6 +201,7 @@ STRINGS[zh,help_install_options]="'install' 命令的选项："
 STRINGS[zh,help_series]="  -s, --series, --kernel-series    选择内核系列 (6.12/6.18/7.1；默认：7.1)"
 STRINGS[zh,help_version]="  -v, --version     指定完整内核版本（未设置 -s 时自动推断系列）"
 STRINGS[zh,help_no_reboot]="  -a, --no-reboot   安装后不重启"
+STRINGS[zh,help_signing_fingerprint]="      --signing-fingerprint    可信 OpenPGP 签名密钥指纹"
 STRINGS[zh,help_examples]="示例："
 STRINGS[zh,help_example1]="  使用英文界面安装 6.18 系列的最新内核："
 STRINGS[zh,help_example2]="  安装特定版本内核且不重启："
@@ -281,6 +298,109 @@ install_dependency() {
             ;;
     esac
     print_colored "${GREEN}" "$(get_string dependency_installed)"
+}
+
+# Install GnuPG using the distribution-specific package name.
+install_gpg_dependency() {
+    case "$DISTRO_FAMILY" in
+        deb|apk) install_dependency gpg gnupg ;;
+        rpm) install_dependency gpg gnupg2 ;;
+    esac
+}
+
+# Normalize an OpenPGP fingerprint for exact comparison.
+normalize_fingerprint() {
+    tr -d '[:space:]' | tr '[:lower:]' '[:upper:]'
+}
+
+# Verify the pinned release key, detached manifest signature, and every download.
+verify_downloads() {
+    print_header "$(get_string verifying_downloads)"
+
+    if [ -z "$TRUSTED_GPG_FINGERPRINT" ]; then
+        print_colored "${RED}" "$(get_string fingerprint_required)"
+        exit 1
+    fi
+    TRUSTED_GPG_FINGERPRINT=$(printf '%s' "$TRUSTED_GPG_FINGERPRINT" | normalize_fingerprint)
+
+    local public_key="$DOWNLOAD_DIR/$SIGNING_PUBLIC_KEY_NAME"
+    local manifest="$DOWNLOAD_DIR/$CHECKSUM_MANIFEST_NAME"
+    local signature="$DOWNLOAD_DIR/$CHECKSUM_SIGNATURE_NAME"
+    if [ ! -s "$public_key" ] || [ ! -s "$manifest" ] || [ ! -s "$signature" ]; then
+        print_colored "${RED}" "$(get_string verification_failed)"
+        exit 1
+    fi
+
+    install_gpg_dependency
+
+    local actual_fingerprint
+    actual_fingerprint=$(gpg --batch --with-colons --show-keys "$public_key" \
+        | sed -n 's/^fpr:::::::::\([^:]*\):$/\1/p' \
+        | sed -n '1p')
+    actual_fingerprint=$(printf '%s' "$actual_fingerprint" | normalize_fingerprint)
+    if [ -z "$actual_fingerprint" ] || [ "$actual_fingerprint" != "$TRUSTED_GPG_FINGERPRINT" ]; then
+        print_colored "${RED}" "$(get_string fingerprint_mismatch)"
+        exit 1
+    fi
+
+    local keyring
+    keyring=$(mktemp)
+    if ! gpg --batch --yes --dearmor --output "$keyring" "$public_key" || \
+       ! gpgv --keyring "$keyring" "$signature" "$manifest"; then
+        rm -f "$keyring"
+        print_colored "${RED}" "$(get_string verification_failed)"
+        exit 1
+    fi
+    rm -f "$keyring"
+
+    declare -A manifest_hashes=()
+    local expected_hash filename extra
+    while read -r expected_hash filename extra; do
+        [ -n "$expected_hash" ] && [ -n "$filename" ] && [ -z "$extra" ] || {
+            print_colored "${RED}" "$(get_string verification_failed)"
+            exit 1
+        }
+        filename=${filename#\*}
+        if [[ ! "$expected_hash" =~ ^[0-9a-fA-F]{64}$ ]] || \
+           [[ "$filename" == */* ]] || [ -n "${manifest_hashes[$filename]+x}" ]; then
+            print_colored "${RED}" "$(get_string verification_failed)"
+            exit 1
+        fi
+        manifest_hashes[$filename]=${expected_hash,,}
+    done < "$manifest"
+
+    local downloaded_file actual_hash
+    for downloaded_file in "$DOWNLOAD_DIR"/*; do
+        [ -f "$downloaded_file" ] || continue
+        filename=$(basename "$downloaded_file")
+        case "$filename" in
+            "$CHECKSUM_MANIFEST_NAME"|"$CHECKSUM_SIGNATURE_NAME") continue ;;
+        esac
+        if [ -z "${manifest_hashes[$filename]+x}" ]; then
+            print_colored "${RED}" "$(get_string verification_failed)"
+            exit 1
+        fi
+        actual_hash=$(sha256sum "$downloaded_file")
+        actual_hash=${actual_hash%% *}
+        if [ "${actual_hash,,}" != "${manifest_hashes[$filename]}" ]; then
+            print_colored "${RED}" "$(get_string verification_failed)"
+            exit 1
+        fi
+    done
+
+    if [ "$DISTRO_FAMILY" = rpm ]; then
+        run_as_root rpm --import "$public_key"
+        local rpm_package
+        for rpm_package in "$DOWNLOAD_DIR"/*.rpm; do
+            [ -f "$rpm_package" ] || continue
+            if ! rpmkeys --checksig "$rpm_package"; then
+                print_colored "${RED}" "$(get_string verification_failed)"
+                exit 1
+            fi
+        done
+    fi
+
+    print_colored "${GREEN}" "✓ $(get_string verification_success)"
 }
 
 
@@ -626,13 +746,23 @@ download_packages() {
             ;;
         apk)
             assets_json=$(jq -r \
-                '.assets[] | select(((.name | endswith(".apk")) and (.name | test("^linux-cloud-bbrv3(-dev)?-"))) or (.name | endswith(".rsa.pub"))) | .browser_download_url' \
+                --arg key "$APK_PUBLIC_KEY_NAME" \
+                '.assets[] | select(((.name | endswith(".apk")) and (.name | test("^linux-cloud-bbrv3(-dev)?-"))) or (.name == $key)) | .browser_download_url' \
                 <<< "$release_json")
             ;;
         *)
             assets_json=""
             ;;
     esac
+
+    local common_assets
+    common_assets=$(jq -r \
+        --arg manifest "$CHECKSUM_MANIFEST_NAME" \
+        --arg signature "$CHECKSUM_SIGNATURE_NAME" \
+        --arg public_key "$SIGNING_PUBLIC_KEY_NAME" \
+        '.assets[] | select(.name == $manifest or .name == $signature or .name == $public_key) | .browser_download_url' \
+        <<< "$release_json")
+    assets_json=$(printf '%s\n%s\n' "$assets_json" "$common_assets" | sed '/^$/d')
 
     if [ -z "$assets_json" ]; then
         print_colored "${RED}" "$(get_string download_failed)"
@@ -648,6 +778,8 @@ download_packages() {
             exit 1
         fi
     done <<< "$assets_json"
+
+    verify_downloads
 
     print_colored "${GREEN}" "$(get_string download_success)"
     detect_kernel_release
@@ -826,6 +958,7 @@ show_help() {
     get_string help_series
     get_string help_version
     get_string help_no_reboot
+    get_string help_signing_fingerprint
     echo ""
 
     get_string help_examples
@@ -887,6 +1020,14 @@ parse_args() {
                 ;;
             -a|--no-reboot)
                 AUTO_REBOOT=false
+                ;;
+            --signing-fingerprint)
+                i=$((i + 1))
+                if [ "$i" -gt "$#" ]; then
+                    print_colored "${RED}" "$(get_string missing_option_value) $current_arg"
+                    exit 1
+                fi
+                TRUSTED_GPG_FINGERPRINT="${!i}"
                 ;;
         esac
 
