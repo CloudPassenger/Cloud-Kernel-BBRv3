@@ -509,7 +509,7 @@ jobs:
           - name: Enterprise Linux 9
             image: rockylinux:9
           - name: Enterprise Linux 10
-            image: rockylinux:10
+            image: rockylinux/rockylinux:10
     steps:
       - name: Download Generic RPM Packages
         uses: actions/download-artifact@v8
@@ -532,7 +532,7 @@ jobs:
               [ -f "/boot/initramfs-$release.img" ]
               [ -L "/lib/modules/$release/build" ]
               [ -d "/usr/src/kernels/$release" ]
-              dnf -y remove kernel-cloud-bbrv3-devel kernel-cloud-bbrv3
+              dnf -y --setopt=clean_requirements_on_remove=False remove kernel-cloud-bbrv3-devel kernel-cloud-bbrv3
               [ ! -e "/lib/modules/$release" ]
               [ ! -e "/boot/vmlinuz-$release" ]
             '
