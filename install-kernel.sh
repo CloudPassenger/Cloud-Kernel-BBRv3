@@ -94,7 +94,7 @@ STRINGS[en,download_failed]="Failed to download one or more kernel packages."
 STRINGS[en,verifying_downloads]="Verifying release signatures and checksums..."
 STRINGS[en,verification_success]="Release signatures and checksums verified successfully."
 STRINGS[en,verification_failed]="Release signature or checksum verification failed."
-STRINGS[en,fingerprint_required]="Error: A trusted signing fingerprint is required. Use --signing-fingerprint or CLOUD_KERNEL_GPG_FINGERPRINT."
+STRINGS[en,fingerprint_unpinned]="Warning: no trusted fingerprint was supplied. Signatures are checked against the release key, but the key identity is not pinned."
 STRINGS[en,fingerprint_mismatch]="Error: The release signing key fingerprint does not match the trusted fingerprint."
 STRINGS[en,installing]="Installing kernel packages..."
 STRINGS[en,install_success]="Kernel installation completed successfully!"
@@ -126,7 +126,7 @@ STRINGS[en,help_install_options]="Options for 'install' command:"
 STRINGS[en,help_series]="  -s, --series, --kernel-series    Select kernel series (6.12/6.18/7.1; default: 7.1)"
 STRINGS[en,help_version]="  -v, --version     Specify full kernel version (infers series when -s is omitted)"
 STRINGS[en,help_no_reboot]="  -a, --no-reboot   Skip reboot after installation"
-STRINGS[en,help_signing_fingerprint]="      --signing-fingerprint    Trusted OpenPGP signing-key fingerprint"
+STRINGS[en,help_signing_fingerprint]="      --signing-fingerprint    Optional trusted OpenPGP signing-key fingerprint"
 STRINGS[en,help_examples]="Examples:"
 STRINGS[en,help_example1]="  Install the latest kernel from the 6.18 series with English interface:"
 STRINGS[en,help_example2]="  Install a specific kernel version without reboot:"
@@ -173,7 +173,7 @@ STRINGS[zh,download_failed]="下载一个或多个内核包失败。"
 STRINGS[zh,verifying_downloads]="正在验证发行签名和校验和..."
 STRINGS[zh,verification_success]="发行签名和校验和验证成功。"
 STRINGS[zh,verification_failed]="发行签名或校验和验证失败。"
-STRINGS[zh,fingerprint_required]="错误：必须提供可信签名指纹。请使用 --signing-fingerprint 或 CLOUD_KERNEL_GPG_FINGERPRINT。"
+STRINGS[zh,fingerprint_unpinned]="警告：未提供可信指纹。签名仍会使用 Release 中的公钥验证，但不会钉扎该密钥的身份。"
 STRINGS[zh,fingerprint_mismatch]="错误：发行签名密钥指纹与可信指纹不匹配。"
 STRINGS[zh,installing]="正在安装内核包..."
 STRINGS[zh,install_success]="内核安装成功完成！"
@@ -205,7 +205,7 @@ STRINGS[zh,help_install_options]="'install' 命令的选项："
 STRINGS[zh,help_series]="  -s, --series, --kernel-series    选择内核系列 (6.12/6.18/7.1；默认：7.1)"
 STRINGS[zh,help_version]="  -v, --version     指定完整内核版本（未设置 -s 时自动推断系列）"
 STRINGS[zh,help_no_reboot]="  -a, --no-reboot   安装后不重启"
-STRINGS[zh,help_signing_fingerprint]="      --signing-fingerprint    可信 OpenPGP 签名密钥指纹"
+STRINGS[zh,help_signing_fingerprint]="      --signing-fingerprint    可选的可信 OpenPGP 签名密钥指纹"
 STRINGS[zh,help_examples]="示例："
 STRINGS[zh,help_example1]="  使用英文界面安装 6.18 系列的最新内核："
 STRINGS[zh,help_example2]="  安装特定版本内核且不重启："
@@ -323,15 +323,13 @@ normalize_fingerprint() {
     tr -d '[:space:]' | tr '[:lower:]' '[:upper:]'
 }
 
-# Verify the pinned release key, detached manifest signature, and every download.
+# Verify the release key, detached manifest signature, and every download.
 verify_downloads() {
     print_header "$(get_string verifying_downloads)"
 
-    if [ -z "$TRUSTED_GPG_FINGERPRINT" ]; then
-        print_colored "${RED}" "$(get_string fingerprint_required)"
-        exit 1
+    if [ -n "$TRUSTED_GPG_FINGERPRINT" ]; then
+        TRUSTED_GPG_FINGERPRINT=$(printf '%s' "$TRUSTED_GPG_FINGERPRINT" | normalize_fingerprint)
     fi
-    TRUSTED_GPG_FINGERPRINT=$(printf '%s' "$TRUSTED_GPG_FINGERPRINT" | normalize_fingerprint)
 
     local public_key="$DOWNLOAD_DIR/$SIGNING_PUBLIC_KEY_NAME"
     local manifest="$DOWNLOAD_DIR/$CHECKSUM_MANIFEST_NAME"
@@ -348,9 +346,17 @@ verify_downloads() {
         | sed -n 's/^fpr:::::::::\([^:]*\):$/\1/p' \
         | sed -n '1p')
     actual_fingerprint=$(printf '%s' "$actual_fingerprint" | normalize_fingerprint)
-    if [ -z "$actual_fingerprint" ] || [ "$actual_fingerprint" != "$TRUSTED_GPG_FINGERPRINT" ]; then
+    if [ -z "$actual_fingerprint" ]; then
+        print_colored "${RED}" "$(get_string verification_failed)"
+        exit 1
+    fi
+    if [ -n "$TRUSTED_GPG_FINGERPRINT" ] && \
+       [ "$actual_fingerprint" != "$TRUSTED_GPG_FINGERPRINT" ]; then
         print_colored "${RED}" "$(get_string fingerprint_mismatch)"
         exit 1
+    fi
+    if [ -z "$TRUSTED_GPG_FINGERPRINT" ]; then
+        print_colored "${YELLOW}" "$(get_string fingerprint_unpinned)"
     fi
 
     local keyring
@@ -440,7 +446,7 @@ verify_downloads() {
 
         if ! run_as_root pacman-key --init || \
            ! run_as_root pacman-key --add "$public_key" || \
-           ! run_as_root pacman-key --lsign-key "$TRUSTED_GPG_FINGERPRINT"; then
+           ! run_as_root pacman-key --lsign-key "$actual_fingerprint"; then
             rm -f "$package_keyring"
             print_colored "${RED}" "$(get_string verification_failed)"
             exit 1
