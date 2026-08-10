@@ -25,10 +25,13 @@ ARCH=""
 LANGUAGE="zh"  # Default language: Chinese
 SELECTED_TAG=""
 KERNEL_RELEASE=""
-IS_ROOT=false
 AUTO_REBOOT=true
 SPECIFIED_VERSION=""
 COMMAND=""
+DISTRO_ID=""
+DISTRO_FAMILY=""
+DISTRO_VERSION_MAJOR=""
+RPM_ARCH=""
 
 # Text colors
 RED='\033[0;31m'
@@ -52,7 +55,7 @@ STRINGS[en,language_selection]="Please select your language:"
 STRINGS[en,english]="English"
 STRINGS[en,chinese]="简体中文"
 STRINGS[en,checking_system]="Checking system compatibility..."
-STRINGS[en,not_debian_based]="Error: This system is not Debian-based. Only Debian and Ubuntu are supported."
+STRINGS[en,not_debian_based]="Error: Supported systems are Debian 11+, Ubuntu 20.04+, Fedora 43/44, Enterprise Linux 9/10, and Alpine Linux 3.21-3.24."
 STRINGS[en,debian_version_too_old]="Error: Debian version must be 11 or higher. Detected version:"
 STRINGS[en,ubuntu_version_too_old]="Error: Ubuntu version must be 20.04 or higher. Detected version:"
 STRINGS[en,architecture_check]="Checking system architecture..."
@@ -96,8 +99,8 @@ STRINGS[en,installing_dependecies]="Installing required dependencies..."
 STRINGS[en,dependency_installed]="Dependency installed successfully."
 STRINGS[en,enter_choice]="Enter choice"
 STRINGS[en,build_time]="Build Time"
-STRINGS[en,updating_apt]="Updating APT package list..."
-STRINGS[en,apt_updated]="APT package list updated successfully."
+STRINGS[en,updating_apt]="Updating package repository metadata..."
+STRINGS[en,apt_updated]="Package repository metadata updated successfully."
 STRINGS[en,version_not_found]="Error: Specified version not found."
 STRINGS[en,using_auto_version]="Using latest available version in the selected series instead."
 STRINGS[en,help_title]="Cloud Kernel BBRv3 Installer - Help"
@@ -123,7 +126,7 @@ STRINGS[zh,language_selection]="请选择您的语言："
 STRINGS[zh,english]="English"
 STRINGS[zh,chinese]="简体中文"
 STRINGS[zh,checking_system]="正在检查系统兼容性..."
-STRINGS[zh,not_debian_based]="错误：此系统不是基于 Debian 的系统。仅支持 Debian 和 Ubuntu。"
+STRINGS[zh,not_debian_based]="错误：支持 Debian 11+、Ubuntu 20.04+、Fedora 43/44、Enterprise Linux 9/10 和 Alpine Linux 3.21-3.24。"
 STRINGS[zh,debian_version_too_old]="错误：Debian 版本必须为 11 或更高。检测到的版本："
 STRINGS[zh,ubuntu_version_too_old]="错误：Ubuntu 版本必须为 20.04 或更高。检测到的版本："
 STRINGS[zh,architecture_check]="正在检查系统架构..."
@@ -167,8 +170,8 @@ STRINGS[zh,installing_dependecies]="正在安装所需的依赖项..."
 STRINGS[zh,dependency_installed]="依赖项安装成功。"
 STRINGS[zh,enter_choice]="请输入选择"
 STRINGS[zh,build_time]="构建时间"
-STRINGS[zh,updating_apt]="正在更新 APT 软件源..."
-STRINGS[zh,apt_updated]="APT 软件源更新成功。"
+STRINGS[zh,updating_apt]="正在更新软件包仓库元数据..."
+STRINGS[zh,apt_updated]="软件包仓库元数据更新成功。"
 STRINGS[zh,version_not_found]="错误：未找到指定版本。"
 STRINGS[zh,using_auto_version]="将使用所选系列的最新可用版本。"
 STRINGS[zh,help_title]="Cloud Kernel BBRv3 安装程序 - 帮助"
@@ -222,53 +225,64 @@ wait_for_key() {
 
 # Check for root privileges
 check_root() {
+    if [ "$(id -u)" -eq 0 ] || command -v sudo >/dev/null 2>&1; then
+        return
+    fi
+
+    print_colored "${RED}" "$(get_string sudo_not_installed)"
+    print_colored "${YELLOW}" "$(get_string root_required)"
+    print_colored "${YELLOW}" "$(get_string run_as_root)"
+    echo "  sudo $0"
+    echo "  or"
+    echo "  su -c \"$0\""
+    exit 1
+}
+
+# Run a command as root without duplicating sudo handling
+run_as_root() {
     if [ "$(id -u)" -eq 0 ]; then
-        IS_ROOT=true
-    elif command -v sudo >/dev/null 2>&1; then
-        IS_ROOT=true
+        "$@"
     else
-        print_colored "${RED}" "$(get_string sudo_not_installed)"
-        print_colored "${YELLOW}" "$(get_string root_required)"
-        print_colored "${YELLOW}" "$(get_string run_as_root)"
-        echo "  sudo $0"
-        echo "  or"
-        echo "  su -c \"$0\""
-        exit 1
+        sudo "$@"
     fi
 }
 
-# Update apt
-update_apt() {
+# Update package repository metadata
+update_package_index() {
     print_colored "${CYAN}" "$(get_string updating_apt)"
-    if [ "$IS_ROOT" = true ]; then
-        apt-get update
-    else
-        sudo apt-get update
-    fi
+
+    case "$DISTRO_FAMILY" in
+        deb) run_as_root apt-get update ;;
+        rpm) run_as_root dnf makecache ;;
+        apk) run_as_root apk update ;;
+        *) return 1 ;;
+    esac
+
     print_colored "${GREEN}" "$(get_string apt_updated)"
 }
 
 # Install a dependency package
 install_dependency() {
-    local package="$1"
-    
-    if ! command -v "$package" >/dev/null 2>&1; then
-        print_colored "${CYAN}" "$(get_string installing_dependecies) $package"
-        
-        if [ "$IS_ROOT" = true ]; then
-            if [ "$(id -u)" -eq 0 ]; then
-                apt-get install -y "$package"
-            else
-                sudo apt-get install -y "$package"
-            fi
-        else
-            print_colored "${RED}" "$(get_string root_required)"
-            exit 1
-        fi
-        
-        print_colored "${GREEN}" "$(get_string dependency_installed)"
+    local command_name="$1"
+    local package_name="${2:-$1}"
+
+    if command -v "$command_name" >/dev/null 2>&1; then
+        return
     fi
+
+    print_colored "${CYAN}" "$(get_string installing_dependecies) $package_name"
+    case "$DISTRO_FAMILY" in
+        deb) run_as_root apt-get install -y "$package_name" ;;
+        rpm) run_as_root dnf install -y "$package_name" ;;
+        apk) run_as_root apk add "$package_name" ;;
+        *)
+            print_colored "${RED}" "$(get_string install_failed)"
+            exit 1
+            ;;
+    esac
+    print_colored "${GREEN}" "$(get_string dependency_installed)"
 }
+
 
 # Select language
 select_language() {
@@ -370,62 +384,90 @@ validate_kernel_selection() {
     fi
 }
 
-# Check if system is Debian-based and version requirements
+# Check the distribution and supported release range
 check_system() {
     print_colored "${CYAN}" "$(get_string checking_system)"
-    
-    # Check if system is Debian-based
-    if [ ! -f /etc/debian_version ]; then
-        if ! command -v apt-get >/dev/null 2>&1; then
+
+    if [ ! -r /etc/os-release ]; then
+        print_colored "${RED}" "$(get_string not_debian_based)"
+        exit 1
+    fi
+
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    DISTRO_ID=${ID:-}
+    DISTRO_VERSION_MAJOR=${VERSION_ID%%.*}
+    if [[ ! "$DISTRO_VERSION_MAJOR" =~ ^[0-9]+$ ]]; then
+        print_colored "${RED}" "$(get_string not_debian_based)"
+        exit 1
+    fi
+
+    case "$DISTRO_ID" in
+        debian)
+            DISTRO_FAMILY=deb
+            if [ "$DISTRO_VERSION_MAJOR" -lt 11 ]; then
+                print_colored "${RED}" "$(get_string debian_version_too_old) ${VERSION_ID:-unknown}"
+                exit 1
+            fi
+            ;;
+        ubuntu)
+            DISTRO_FAMILY=deb
+            local ubuntu_minor=${VERSION_ID#*.}
+            ubuntu_minor=${ubuntu_minor%%.*}
+            if [ "$DISTRO_VERSION_MAJOR" -lt 20 ] || \
+               { [ "$DISTRO_VERSION_MAJOR" -eq 20 ] && [ "$ubuntu_minor" -lt 4 ]; }; then
+                print_colored "${RED}" "$(get_string ubuntu_version_too_old) ${VERSION_ID:-unknown}"
+                exit 1
+            fi
+            ;;
+        fedora)
+            DISTRO_FAMILY=rpm
+            if [ "$DISTRO_VERSION_MAJOR" -lt 43 ] || [ "$DISTRO_VERSION_MAJOR" -gt 44 ]; then
+                print_colored "${RED}" "$(get_string not_debian_based)"
+                exit 1
+            fi
+            ;;
+        rhel|rocky|centos|almalinux|ol)
+            DISTRO_FAMILY=rpm
+            if [ "$DISTRO_VERSION_MAJOR" -lt 9 ] || [ "$DISTRO_VERSION_MAJOR" -gt 10 ]; then
+                print_colored "${RED}" "$(get_string not_debian_based)"
+                exit 1
+            fi
+            ;;
+        alpine)
+            DISTRO_FAMILY=apk
+            case "${VERSION_ID:-}" in
+                3.21|3.21.*|3.22|3.22.*|3.23|3.23.*|3.24|3.24.*) ;;
+                *)
+                    print_colored "${RED}" "$(get_string not_debian_based)"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        *)
             print_colored "${RED}" "$(get_string not_debian_based)"
             exit 1
-        fi
-    fi
-    
-    # Install required dependencies
-    install_dependency "bc"
-    
-    # Check Debian version
-    if grep -q "Debian" /etc/issue; then
-        version=$(cat /etc/debian_version)
-        major_version=${version%%.*}
-        if [ "$major_version" -lt 11 ]; then
-            print_colored "${RED}" "$(get_string debian_version_too_old) $version"
-            exit 1
-        fi
-    fi
-    
-    # Check Ubuntu version
-    if grep -q "Ubuntu" /etc/issue; then
-        # Install lsb-release if not installed
-        install_dependency "lsb-release"
-        
-        version=$(lsb_release -rs)
-        if [ "$(echo "$version < 20.04" | bc)" -eq 1 ]; then
-            print_colored "${RED}" "$(get_string ubuntu_version_too_old) $version"
-            exit 1
-        fi
-    fi
-    
-    # Install lsb-release if not installed
-    install_dependency "lsb-release"
-    
-    print_colored "${GREEN}" "✓ $(lsb_release -is) $(lsb_release -rs)"
+            ;;
+    esac
+
+    print_colored "${GREEN}" "✓ ${PRETTY_NAME:-$DISTRO_ID}"
 }
 
 # Check system architecture
 check_arch() {
     print_colored "${CYAN}" "$(get_string architecture_check)"
-    
+
     local machine
     machine=$(uname -m)
-    
+
     case "$machine" in
         x86_64|amd64)
-            ARCH="amd64"
+            ARCH=amd64
+            RPM_ARCH=x86_64
             ;;
         aarch64|arm64)
-            ARCH="arm64"
+            ARCH=arm64
+            RPM_ARCH=aarch64
             ;;
         *)
             print_colored "${RED}" "$(get_string architecture_not_supported)"
@@ -433,8 +475,8 @@ check_arch() {
             exit 1
             ;;
     esac
-    
-    print_colored "${GREEN}" "✓ $ARCH"
+
+    print_colored "${GREEN}" "✓ $machine"
 }
 
 # Fetch available releases from GitHub
@@ -442,9 +484,6 @@ fetch_releases() {
     print_colored "${CYAN}" "$(get_string fetching_releases)"
     print_colored "${CYAN}" "$(get_string using_series) $KERNEL_SERIES"
 
-    # Install curl and jq if not installed
-    install_dependency "curl"
-    install_dependency "jq"
 
     # Get up to 100 releases so older maintained series remain selectable
     local releases_json
@@ -564,57 +603,90 @@ fetch_releases() {
 # Download kernel packages
 download_packages() {
     print_header "$(get_string downloading)"
-    
-    # Remove any leftover packages from a previous run before downloading,
-    # otherwise old kernel debs would get mixed in with the new ones and
-    # end up being reinstalled by install_packages().
+    DOWNLOAD_DIR="./cloud-kernels/${SELECTED_TAG}/${DISTRO_ID}-${ARCH}"
+
+    # Always start with an empty target-specific directory so stale packages
+    # from an earlier release can never be installed with the selected one.
     rm -rf "$DOWNLOAD_DIR"
     mkdir -p "$DOWNLOAD_DIR"
     print_colored "${CYAN}" "$(get_string created_dir) $DOWNLOAD_DIR"
-    
-    # Get release assets using jq
-    local assets_json
-    assets_json=$(curl -s "${REPO_API}/releases/tags/${SELECTED_TAG}" | jq -r '.assets[] | select(.name | endswith(".deb")) | select(.name | test("linux-(headers|image|libc-dev)")) | .browser_download_url')
-    
+
+    local release_json assets_json
+    release_json=$(curl -fsSL "${REPO_API}/releases/tags/${SELECTED_TAG}")
+
+    case "$DISTRO_FAMILY" in
+        deb)
+            assets_json=$(jq -r '.assets[] | select(.name | endswith(".deb")) | select(.name | test("linux-(headers|image|libc-dev)")) | .browser_download_url' <<< "$release_json")
+            ;;
+        rpm)
+            assets_json=$(jq -r \
+                --arg arch "$RPM_ARCH" \
+                '.assets[] | select(.name | test("^kernel-cloud-bbrv3(-devel)?-")) | select(.name | endswith("." + $arch + ".rpm")) | .browser_download_url' \
+                <<< "$release_json")
+            ;;
+        apk)
+            assets_json=$(jq -r \
+                '.assets[] | select(((.name | endswith(".apk")) and (.name | test("^linux-cloud-bbrv3(-dev)?-"))) or (.name | endswith(".rsa.pub"))) | .browser_download_url' \
+                <<< "$release_json")
+            ;;
+        *)
+            assets_json=""
+            ;;
+    esac
+
     if [ -z "$assets_json" ]; then
         print_colored "${RED}" "$(get_string download_failed)"
         exit 1
     fi
-    
-    # Download packages
-    while IFS= read -r deb_url; do
-        local filename
-        filename=$(basename "$deb_url")
-        print_colored "${CYAN}" "$(get_string downloading_file) $filename"
 
-        if ! curl -L "$deb_url" -o "${DOWNLOAD_DIR}/${filename}" --progress-bar; then
+    local package_url filename
+    while IFS= read -r package_url; do
+        filename=$(basename "$package_url")
+        print_colored "${CYAN}" "$(get_string downloading_file) $filename"
+        if ! curl -L "$package_url" -o "${DOWNLOAD_DIR}/${filename}" --progress-bar; then
             print_colored "${RED}" "$(get_string download_failed)"
             exit 1
         fi
     done <<< "$assets_json"
-    
-    print_colored "${GREEN}" "$(get_string download_success)"
 
+    print_colored "${GREEN}" "$(get_string download_success)"
     detect_kernel_release
 }
 
-# Derive the kernel release (including any LOCALVERSION suffix) from the
-# downloaded linux-image package name, e.g.
-# linux-image-6.12.21-cloudy_6.12.21-1_amd64.deb -> 6.12.21-cloudy
+# Derive the exact kernel release, including CONFIG_LOCALVERSION, from the
+# downloaded DEB/RPM metadata or the installed Alpine kernel metadata.
 detect_kernel_release() {
-    local image_deb=""
+    KERNEL_RELEASE=""
 
-    while IFS= read -r image_deb; do
-        [ -n "$image_deb" ] || continue
-        local name
-        name=$(basename "$image_deb")
-        name="${name#linux-image-}"
-        name="${name%%_*}"
-        if [ -n "$name" ]; then
-            KERNEL_RELEASE="$name"
-            break
-        fi
-    done < <(find "$DOWNLOAD_DIR" -name "linux-image-*.deb" ! -name "*-dbg_*.deb" | sort)
+    case "$DISTRO_FAMILY" in
+        deb)
+            local image_deb=""
+            while IFS= read -r image_deb; do
+                [ -n "$image_deb" ] || continue
+                local name
+                name=$(basename "$image_deb")
+                name="${name#linux-image-}"
+                name="${name%%_*}"
+                if [ -n "$name" ]; then
+                    KERNEL_RELEASE="$name"
+                    break
+                fi
+            done < <(find "$DOWNLOAD_DIR" -name 'linux-image-*.deb' ! -name '*-dbg_*.deb' | sort)
+            ;;
+        rpm)
+            local main_rpm=""
+            main_rpm=$(find "$DOWNLOAD_DIR" -name 'kernel-cloud-bbrv3-[0-9]*.rpm' | sort | sed -n '1p')
+            if [ -n "$main_rpm" ]; then
+                KERNEL_RELEASE=$(rpm -qp --provides "$main_rpm" \
+                    | sed -n 's/^kernel-uname-r = //p' | sed -n '1p')
+            fi
+            ;;
+        apk)
+            if [ -r /usr/share/kernel/cloud-bbrv3/kernel.release ]; then
+                KERNEL_RELEASE=$(cat /usr/share/kernel/cloud-bbrv3/kernel.release)
+            fi
+            ;;
+    esac
 
     if [ -z "$KERNEL_RELEASE" ]; then
         return
@@ -636,91 +708,101 @@ detect_kernel_release() {
 # Install kernel packages
 install_packages() {
     print_header "$(get_string installing)"
-    
-    local install_cmd=(dpkg -i)
-    if [ "$(id -u)" -ne 0 ]; then
-        install_cmd=(sudo dpkg -i)
-    fi
 
-    local deb
+    case "$DISTRO_FAMILY" in
+        deb)
+            local install_cmd=(dpkg -i)
+            if [ "$(id -u)" -ne 0 ]; then
+                install_cmd=(sudo dpkg -i)
+            fi
 
-    # First install headers
-    local headers=()
-    mapfile -t headers < <(find "$DOWNLOAD_DIR" -name "linux-headers*.deb")
-    for deb in "${headers[@]}"; do
-        print_colored "${CYAN}" "Installing: $(basename "$deb")"
-        if ! "${install_cmd[@]}" "$deb"; then
-            print_colored "${RED}" "$(get_string install_failed)"
-            exit 1
-        fi
-    done
+            local deb
+            local headers=()
+            mapfile -t headers < <(find "$DOWNLOAD_DIR" -name 'linux-headers*.deb')
+            for deb in "${headers[@]}"; do
+                print_colored "${CYAN}" "Installing: $(basename "$deb")"
+                "${install_cmd[@]}" "$deb" || {
+                    print_colored "${RED}" "$(get_string install_failed)"
+                    exit 1
+                }
+            done
 
-    # Then install libc-dev
-    local libc_dev=()
-    mapfile -t libc_dev < <(find "$DOWNLOAD_DIR" -name "linux-libc-dev*.deb")
-    for deb in "${libc_dev[@]}"; do
-        print_colored "${CYAN}" "Installing: $(basename "$deb")"
-        if ! "${install_cmd[@]}" "$deb"; then
-            print_colored "${RED}" "$(get_string install_failed)"
-            exit 1
-        fi
-    done
+            local libc_dev=()
+            mapfile -t libc_dev < <(find "$DOWNLOAD_DIR" -name 'linux-libc-dev*.deb')
+            for deb in "${libc_dev[@]}"; do
+                print_colored "${CYAN}" "Installing: $(basename "$deb")"
+                "${install_cmd[@]}" "$deb" || {
+                    print_colored "${RED}" "$(get_string install_failed)"
+                    exit 1
+                }
+            done
 
-    # Finally install image
-    local images=()
-    mapfile -t images < <(find "$DOWNLOAD_DIR" -name "linux-image*.deb")
-    for deb in "${images[@]}"; do
-        print_colored "${CYAN}" "Installing: $(basename "$deb")"
-        if ! "${install_cmd[@]}" "$deb"; then
-            print_colored "${RED}" "$(get_string install_failed)"
-            exit 1
-        fi
-    done
-    
+            local images=()
+            mapfile -t images < <(find "$DOWNLOAD_DIR" -name 'linux-image*.deb')
+            for deb in "${images[@]}"; do
+                print_colored "${CYAN}" "Installing: $(basename "$deb")"
+                "${install_cmd[@]}" "$deb" || {
+                    print_colored "${RED}" "$(get_string install_failed)"
+                    exit 1
+                }
+            done
+            ;;
+        rpm)
+            local rpm_packages=()
+            mapfile -t rpm_packages < <(find "$DOWNLOAD_DIR" -name '*.rpm' | sort)
+            if [ "${#rpm_packages[@]}" -eq 0 ] || \
+               ! run_as_root dnf install -y "${rpm_packages[@]}"; then
+                print_colored "${RED}" "$(get_string install_failed)"
+                exit 1
+            fi
+            ;;
+        apk)
+            local apk_key apk_packages=()
+            for apk_key in "$DOWNLOAD_DIR"/*.rsa.pub; do
+                [ -e "$apk_key" ] || continue
+                run_as_root install -Dm644 "$apk_key" "/etc/apk/keys/$(basename "$apk_key")"
+            done
+            mapfile -t apk_packages < <(find "$DOWNLOAD_DIR" -name '*.apk' | sort)
+            if [ "${#apk_packages[@]}" -eq 0 ] || \
+               ! run_as_root apk add "${apk_packages[@]}"; then
+                print_colored "${RED}" "$(get_string install_failed)"
+                exit 1
+            fi
+            detect_kernel_release
+            ;;
+    esac
+
     print_colored "${GREEN}" "$(get_string install_success)"
 
-    # Clean up downloaded packages now that they are installed, so the
-    # directory doesn't linger and get reused (and reinstalled) next run.
-    rm -rf "$DOWNLOAD_DIR"
-
-    # Confirm the suffixed kernel image really landed in /boot before rebooting
-    if [ -n "$KERNEL_RELEASE" ]; then
-        if compgen -G "/boot/vmlinuz-${KERNEL_RELEASE}" >/dev/null; then
-            print_colored "${GREEN}" "✓ $(get_string boot_entry_found) /boot/vmlinuz-${KERNEL_RELEASE}"
-        else
-            print_colored "${YELLOW}" "$(get_string boot_entry_missing) /boot/vmlinuz-${KERNEL_RELEASE}"
-        fi
+    local boot_image=""
+    case "$DISTRO_FAMILY" in
+        deb|rpm) boot_image="/boot/vmlinuz-${KERNEL_RELEASE}" ;;
+        apk) boot_image=/boot/vmlinuz-cloud-bbrv3 ;;
+    esac
+    if [ -n "$KERNEL_RELEASE" ] && [ -e "$boot_image" ]; then
+        print_colored "${GREEN}" "✓ $(get_string boot_entry_found) $boot_image"
+    elif [ -n "$boot_image" ]; then
+        print_colored "${YELLOW}" "$(get_string boot_entry_missing) $boot_image"
     fi
 
-    # Handle reboot based on AUTO_REBOOT flag
+    rm -rf "$DOWNLOAD_DIR"
+
     if [ "$AUTO_REBOOT" = false ]; then
         print_colored "${YELLOW}" "$(get_string skip_reboot)"
         return
     fi
-    
-    # Ask for reboot if not in automatic mode
+
     if [ "$COMMAND" != "install" ]; then
         local reboot_choice
         read -r -p "$(get_string reboot_prompt)" reboot_choice
-        if [[ "$reboot_choice" =~ ^[Yy]$ ]]; then
-            print_colored "${YELLOW}" "$(get_string rebooting)"
-            if [ "$(id -u)" -eq 0 ]; then
-                reboot
-            else
-                sudo reboot
-            fi
-        else
+        if [[ ! "$reboot_choice" =~ ^[Yy]$ ]]; then
             print_colored "${YELLOW}" "$(get_string skip_reboot)"
-        fi
-    else
-        # Automatic reboot in automatic mode
-        print_colored "${YELLOW}" "$(get_string rebooting)"
-        if [ "$(id -u)" -eq 0 ]; then
-            reboot
-        else
-            sudo reboot
+            return
         fi
     fi
+
+    print_colored "${YELLOW}" "$(get_string rebooting)"
+    run_as_root reboot
 }
 
 # Show help message
@@ -825,21 +907,14 @@ parse_args() {
 # ==========================================================================
 
 main() {
-    # Parse command line arguments
     parse_args "$@"
 
-    # Show help if requested
     if [ "$COMMAND" = "help" ]; then
         show_help
     fi
 
-    # Check for root privileges
     check_root
 
-    # Update apt
-    update_apt
-
-    # Interactive mode selects language and kernel series
     if [ "$COMMAND" = "interactive" ]; then
         select_language
         if [ -z "$KERNEL_SERIES" ]; then
@@ -849,20 +924,14 @@ main() {
         fi
     fi
 
-    # Display header
     print_header "$(get_string welcome)"
-
-    # Check system compatibility
     check_system
+    update_package_index
     check_arch
-
-    # Fetch and select release
+    install_dependency curl
+    install_dependency jq
     fetch_releases
-
-    # Download packages
     download_packages
-
-    # Install packages
     install_packages
 }
 

@@ -39,7 +39,7 @@
 > 此变更用于避免与发行版官方同版本号内核发生文件冲突、互相覆盖，同时保证官方内核仍可作为回退启动项保留。
 > 早期未带后缀的旧版本不受影响；若你之前安装过无后缀版本，升级后新旧内核会共存，可在确认新内核可正常启动后自行移除旧包。
 
-本仓库提供集成增强功能的 Debian 内核自动构建：
+本仓库提供基于同一份已打补丁、已解析配置源码的多格式内核自动构建：
 - 使用 Linux Kernel 官方源码（6.12 / 6.18 / 7.1 系列，来自 [kernel.org](https://www.kernel.org/)）
 - 集成 Debian 内核团队维护的补丁 (来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
 - **BBR 拥塞控制算法更新!**
@@ -49,6 +49,7 @@
 - 内置 **TCP Brutal** 多路复用拥塞控制算法 (来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
 - 使用上游 **EEVDF** 公平调度器，默认启用且不引入第三方 Scheduler 补丁
 - 多架构支持 (x86_64 & arm64)，每日自动构建跟踪更新
+- 通用包支持：单次构建 generic RPM 与 generic APK，再通过多发行版容器矩阵验证安装和卸载生命周期
 
 ## 🚀 核心特性
 
@@ -64,6 +65,7 @@
 | 驱动精简           | 裁剪未用网卡厂商驱动，减小内核体积                                       |
 | 内核后缀           | 默认 `-cloudy`（`CONFIG_LOCALVERSION`），避免与官方内核冲突               |
 | 支持架构           | x86_64 (amd64) 和 arm64 (aarch64)                                      |
+| 软件包格式         | Debian/Ubuntu `.deb`、Fedora/EL generic `.rpm`、Alpine generic `.apk`   |
 | 构建频率           | 每日自动构建 + 支持手动触发                                              |
 
 ## 📥 安装指南
@@ -103,20 +105,29 @@ chmod +x install-kernel.sh
 
 ### 预构建软件包
 
-1. 从 [发布页面](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/releases) 下载最新构建包
-   ```bash
-   wget https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/releases/download/<版本>/linux-{image,headers}-<版本>_<架构>.deb
-   ```
+每个架构的 Release 同时提供三种软件包。generic RPM 由 Rocky Linux 9 构建，并原样验证于 Fedora 43/44 与 Enterprise Linux 9/10；generic APK 由 Alpine 3.21 构建，并原样验证于 Alpine 3.21-3.24。
 
-2. 安装软件包：
-   ```bash
-   sudo dpkg -i linux-*.deb
-   ```
+| 系统 | 软件包 | 支持版本 |
+|---|---|---|
+| Debian / Ubuntu | `.deb` | Debian 11+、Ubuntu 20.04+ |
+| Fedora / Enterprise Linux | generic `.rpm` | Fedora 43/44、EL 9/10 |
+| Alpine Linux | generic `.apk` | Alpine 3.21/3.22/3.23/3.24 |
 
-3. 更新启动引导：
-   ```bash
-   sudo update-grub && sudo reboot
-   ```
+从 [发布页面](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/releases) 下载当前架构的软件包后安装：
+
+```bash
+# Debian / Ubuntu
+sudo dpkg -i linux-image-*.deb linux-headers-*.deb
+
+# Fedora / Enterprise Linux
+sudo dnf install ./kernel-cloud-bbrv3-[0-9]*.rpm ./kernel-cloud-bbrv3-devel-*.rpm
+
+# Alpine Linux（先安装 Bash 才能运行一键安装脚本）
+sudo cp ./*.rsa.pub /etc/apk/keys/
+sudo apk add ./linux-cloud-bbrv3-[0-9]*.apk ./linux-cloud-bbrv3-dev-*.apk
+```
+
+RPM 与 APK 当前不支持 Secure Boot；请保留发行版原有内核作为回退启动项。
 
 ### 验证安装
 
@@ -139,10 +150,11 @@ sysctl net.ipv4.tcp_available_congestion_control  # 加载后应包含 bbr bbr1 
 
 通过 GitHub Actions 手动构建：
 1. 进入仓库 **Actions** 标签页
-2. 选择 **Build Debian Kernel** 工作流
+2. 选择 **Build Cloud Kernel Packages** 工作流
 3. 点击 **Run workflow**
 4. 输入完整的内核版本（如 `6.18.15`），选择目标架构
 5. 可选：修改 **Kernel suffix** 参数自定义内核后缀（默认 `cloudy`，留空则构建无后缀内核）
+6. 工作流只编译一套 generic RPM 和一套 generic APK；兼容性矩阵复用同一产物，不会为每个发行版重复编译内核
 
 ## 🤝 参与贡献
 

@@ -39,7 +39,7 @@ The installer defaults to `7.1`, while every maintained series can be selected e
 > This prevents file conflicts with the distribution's own kernel of the same version and keeps the stock kernel available as a fallback boot entry.
 > Older releases built without a suffix are unaffected; if you previously installed one, the old and new kernels will coexist after upgrading, and you can remove the old package once the new kernel boots correctly.
 
-This repository provides automated daily builds of Debian kernel packages with enhanced networking and scheduling features:
+This repository builds multiple package formats from one identically patched and resolved kernel source tree:
 - Using official Linux Kernel source (6.12 / 6.18 / 7.1 series, from [kernel.org](https://www.kernel.org/))
 - Integrating patches maintained by the Debian kernel team (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
 - **BBR Congestion Control Algorithm Updates!**
@@ -49,6 +49,7 @@ This repository provides automated daily builds of Debian kernel packages with e
 - Integrated **TCP Brutal** multiplexing (mux) congestion control algorithm from apernet (from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
 - Uses the upstream **EEVDF** fair scheduler by default without third-party Scheduler patches
 - Multi-architecture support (x86_64 & arm64), daily automatic builds tracking updates
+- Generic package support: build one RPM set and one APK set, then validate their install/remove lifecycle across distribution matrices
 
 ## 🚀 Key Features
 
@@ -64,6 +65,7 @@ This repository provides automated daily builds of Debian kernel packages with e
 | Driver Trim        | Unused NIC vendor drivers stripped to reduce kernel size              |
 | Kernel Suffix      | `-cloudy` by default (`CONFIG_LOCALVERSION`) to avoid stock conflicts |
 | Architecture       | x86_64 (amd64) & arm64 (aarch64)                                      |
+| Package Formats    | Debian/Ubuntu `.deb`, generic Fedora/EL `.rpm`, generic Alpine `.apk` |
 | Build Frequency    | Daily automatic builds + manual trigger support                        |
 
 ## 📥 Installation Guide
@@ -103,20 +105,29 @@ Script parameters:
 
 ### Pre-built Packages
 
-1. Download the latest build from [Releases](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/releases)
-   ```bash
-   wget https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/releases/download/<version>/linux-{image,headers}-<version>_<arch>.deb
-   ```
+Every architecture-specific release contains three package formats. The generic RPM is built once on Rocky Linux 9 and validated unchanged on Fedora 43/44 and Enterprise Linux 9/10. The generic APK is built once on Alpine 3.21 and validated unchanged on Alpine 3.21-3.24.
 
-2. Install packages:
-   ```bash
-   sudo dpkg -i linux-*.deb
-   ```
+| System | Package | Supported releases |
+|---|---|---|
+| Debian / Ubuntu | `.deb` | Debian 11+, Ubuntu 20.04+ |
+| Fedora / Enterprise Linux | generic `.rpm` | Fedora 43/44, EL 9/10 |
+| Alpine Linux | generic `.apk` | Alpine 3.21/3.22/3.23/3.24 |
 
-3. Update bootloader:
-   ```bash
-   sudo update-grub && sudo reboot
-   ```
+Download the packages for the current architecture from [Releases](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/releases), then install them:
+
+```bash
+# Debian / Ubuntu
+sudo dpkg -i linux-image-*.deb linux-headers-*.deb
+
+# Fedora / Enterprise Linux
+sudo dnf install ./kernel-cloud-bbrv3-[0-9]*.rpm ./kernel-cloud-bbrv3-devel-*.rpm
+
+# Alpine Linux (install Bash before using the one-click installer)
+sudo cp ./*.rsa.pub /etc/apk/keys/
+sudo apk add ./linux-cloud-bbrv3-[0-9]*.apk ./linux-cloud-bbrv3-dev-*.apk
+```
+
+RPM and APK packages do not currently support Secure Boot. Keep the distribution kernel installed as a recovery option.
 
 ### Verify Installation
 
@@ -139,10 +150,11 @@ sysctl net.ipv4.tcp_available_congestion_control  # Should then include bbr bbr1
 
 To build manually using GitHub Actions:
 1. Go to Repository **Actions** tab
-2. Select **Build Debian Kernel** workflow
+2. Select the **Build Cloud Kernel Packages** workflow
 3. Click **Run workflow**
 4. Enter a full kernel version (e.g. `6.18.15`) and select the target architecture
 5. Optional: adjust the **Kernel suffix** input to customize the suffix (defaults to `cloudy`; leave empty to build without one)
+6. The workflow compiles one generic RPM set and one generic APK set; compatibility matrices reuse those exact artifacts instead of rebuilding the kernel per distribution
 
 ## 🤝 Contributing
 

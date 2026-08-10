@@ -1,0 +1,105 @@
+# Maintainer: Cloud Kernel BBRv3 Maintainers <noreply@cloud-kernel-bbrv3.invalid>
+pkgname=linux-cloud-bbrv3
+pkgver=@KERNEL_VERSION@
+pkgrel=0
+_kernel_release=@KERNEL_RELEASE@
+pkgdesc="Cloud kernel with BBRv3 and custom congestion controls"
+url="https://github.com/CloudPassenger/Cloud-Kernel-BBRv3"
+arch="x86_64 aarch64"
+license="GPL-2.0-only"
+depends="initramfs-generator linux-firmware"
+makedepends="$_depends_dev bc binutils bpftool ccache diffutils findutils gawk
+	installkernel linux-headers openssl-dev python3 rsync sed"
+options="!strip !check"
+source="prepared-kernel.tar.zst"
+install="$pkgname.post-deinstall"
+subpackages="$pkgname-dev:_dev:$CBUILD_ARCH"
+builddir="$srcdir/linux"
+
+_kernelarch() {
+	case "$1" in
+		x86_64) echo x86 ;;
+		aarch64) echo arm64 ;;
+		*) return 1 ;;
+	esac
+}
+
+build() {
+	unset CFLAGS CPPFLAGS CXXFLAGS LDFLAGS
+	local karch="$(_kernelarch "$CARCH")"
+	cd "$builddir"
+	make ARCH="$karch" olddefconfig
+	make ARCH="$karch" \
+		V=@MAKE_VERBOSITY@ \
+		CC="ccache gcc" \
+		HOSTCC="ccache gcc" \
+		AWK="${AWK:-gawk}" \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1))-Alpine"
+
+	local release
+	release=$(make -s ARCH="$karch" kernelrelease)
+	if [ "$release" != "$_kernel_release" ]; then
+		error "expected kernel release $_kernel_release, got $release"
+		return 1
+	fi
+}
+
+package() {
+	local karch="$(_kernelarch "$CARCH")"
+	cd "$builddir"
+	local release
+	release=$(make -s ARCH="$karch" kernelrelease)
+
+	mkdir -p "$pkgdir/boot" "$pkgdir/lib/modules/$release"
+	make ARCH="$karch" \
+		V=@MAKE_VERBOSITY@ \
+		INSTALL_MOD_PATH="$pkgdir" \
+		INSTALL_MOD_STRIP=1 \
+		DEPMOD=true \
+		modules_install
+
+	local image_path
+	image_path=$(make -s ARCH="$karch" image_name)
+	install -Dm644 "$image_path" "$pkgdir/boot/vmlinuz-cloud-bbrv3"
+	install -Dm644 System.map "$pkgdir/boot/System.map-$release"
+	install -Dm644 .config "$pkgdir/boot/config-$release"
+	install -Dm644 include/config/kernel.release \
+		"$pkgdir/usr/share/kernel/cloud-bbrv3/kernel.release"
+
+	if [ -d "arch/$karch/boot/dts" ]; then
+		make ARCH="$karch" \
+			V=@MAKE_VERBOSITY@ \
+			INSTALL_DTBS_PATH="$pkgdir/boot/dtbs-cloud-bbrv3" \
+			dtbs_install
+	fi
+
+	rm -f "$pkgdir/lib/modules/$release/build" \
+		"$pkgdir/lib/modules/$release/source"
+	rm -rf "$pkgdir/lib/firmware"
+	printf '%s\n' '-cloud-bbrv3' > "$pkgdir/lib/modules/$release/kernel-suffix"
+	ln -sf /boot/vmlinuz-cloud-bbrv3 \
+		"$pkgdir/lib/modules/$release/vmlinuz"
+}
+
+_dev() {
+	local karch="$(_kernelarch "$CARCH")"
+	cd "$builddir"
+	local release
+	release=$(make -s ARCH="$karch" kernelrelease)
+	local dir="$subpkgdir/usr/src/linux-headers-$release"
+
+	pkgdesc="Headers and scripts for external modules on $release"
+	depends="$_depends_dev"
+	install="linux-cloud-bbrv3-dev.post-deinstall"
+
+	make ARCH="$karch" run-command \
+		V=@MAKE_VERBOSITY@ \
+		KBUILD_RUN_COMMAND="${builddir}/scripts/package/install-extmod-build $dir"
+	mkdir -p "$subpkgdir/lib/modules/$release"
+	ln -sf /usr/src/linux-headers-$release \
+		"$subpkgdir/lib/modules/$release/build"
+
+	if [ -f certs/signing_key.x509 ]; then
+		install -Dm644 certs/signing_key.x509 "$dir/certs/signing_key.x509"
+	fi
+}
