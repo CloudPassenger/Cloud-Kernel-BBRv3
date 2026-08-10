@@ -565,7 +565,10 @@ fetch_releases() {
 download_packages() {
     print_header "$(get_string downloading)"
     
-    # Create download directory
+    # Remove any leftover packages from a previous run before downloading,
+    # otherwise old kernel debs would get mixed in with the new ones and
+    # end up being reinstalled by install_packages().
+    rm -rf "$DOWNLOAD_DIR"
     mkdir -p "$DOWNLOAD_DIR"
     print_colored "${CYAN}" "$(get_string created_dir) $DOWNLOAD_DIR"
     
@@ -675,6 +678,10 @@ install_packages() {
     done
     
     print_colored "${GREEN}" "$(get_string install_success)"
+
+    # Clean up downloaded packages now that they are installed, so the
+    # directory doesn't linger and get reused (and reinstalled) next run.
+    rm -rf "$DOWNLOAD_DIR"
 
     # Confirm the suffixed kernel image really landed in /boot before rebooting
     if [ -n "$KERNEL_RELEASE" ]; then
