@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -e
+
+# Pass maintainer script parameters to hook scripts
+export DEB_MAINT_PARAMS="$*"
+
+# Tell initramfs builder whether it's wanted
+export INITRD=@INITRD@
+
+test -d @HOOKDIR@ && run-parts --arg="@KERNEL_RELEASE@" --arg="/@INSTALLED_IMAGE_PATH@" @HOOKDIR@
+exit 0

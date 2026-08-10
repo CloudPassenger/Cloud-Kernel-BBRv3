@@ -8,10 +8,10 @@ url="https://github.com/CloudPassenger/Cloud-Kernel-BBRv3"
 arch="x86_64 aarch64"
 license="GPL-2.0-only"
 depends="initramfs-generator linux-firmware"
-makedepends="$_depends_dev bc binutils bpftool ccache diffutils findutils gawk
+makedepends="$_depends_dev bc binutils bpftool diffutils findutils gawk
 	installkernel linux-headers openssl-dev python3 rsync sed"
 options="!strip !check"
-source="prepared-kernel.tar.zst"
+source="compiled-kernel.tar.zst"
 install="$pkgname.post-deinstall"
 subpackages="$pkgname-dev:_dev:$CBUILD_ARCH"
 builddir="$srcdir/linux"
@@ -25,16 +25,8 @@ _kernelarch() {
 }
 
 build() {
-	unset CFLAGS CPPFLAGS CXXFLAGS LDFLAGS
 	local karch="$(_kernelarch "$CARCH")"
 	cd "$builddir"
-	make ARCH="$karch" olddefconfig
-	make ARCH="$karch" \
-		V=@MAKE_VERBOSITY@ \
-		CC="ccache gcc" \
-		HOSTCC="ccache gcc" \
-		AWK="${AWK:-gawk}" \
-		KBUILD_BUILD_VERSION="$((pkgrel + 1))-Alpine"
 
 	local release
 	release=$(make -s ARCH="$karch" kernelrelease)
@@ -42,6 +34,16 @@ build() {
 		error "expected kernel release $_kernel_release, got $release"
 		return 1
 	fi
+
+	# Refresh host-side build tooling (fixdep, modpost, sign-file, ...)
+	# against musl. The vmlinux/*.ko objects were already compiled once
+	# by build_kernel.sh and are left untouched.
+	make ARCH="$karch" \
+		V=@MAKE_VERBOSITY@ \
+		CC=gcc \
+		HOSTCC=gcc \
+		AWK="${AWK:-gawk}" \
+		modules_prepare
 }
 
 package() {

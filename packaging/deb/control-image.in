@@ -1,0 +1,9 @@
+Package: linux-image-@KERNEL_RELEASE@
+Version: @PACKAGE_VERSION@
+Architecture: @DEBARCH@
+Maintainer: @MAINTAINER@
+Section: kernel
+Priority: optional
+Description: Linux kernel, version @KERNEL_RELEASE@
+ This package contains the Linux kernel, modules and corresponding other
+ files, version @KERNEL_RELEASE@, built by Cloud Kernel BBRv3.

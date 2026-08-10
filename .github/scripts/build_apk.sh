@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build one Alpine-version-neutral APK set from a prepared kernel archive.
+# Build one Alpine-version-neutral APK set from an already-compiled kernel archive.
 set -euo pipefail
 
 usage() {
-  printf 'usage: %s <kernel-version> <arch> <build-id> <source-archive> <output-dir>\n' "$(basename "$0")" >&2
+  printf 'usage: %s <kernel-version> <arch> <build-id> <compiled-archive> <output-dir>\n' "$(basename "$0")" >&2
   exit 1
 }
 
@@ -12,7 +12,7 @@ usage() {
 kernel_version=$1
 arch_arg=$2
 build_id=$3
-source_archive=$(realpath "$4")
+compiled_archive=$(realpath "$4")
 output_dir=$(realpath -m "$5")
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$script_dir/../.." && pwd)
@@ -38,8 +38,8 @@ case "$arch_arg" in
     ;;
 esac
 
-if [ ! -f "$source_archive" ]; then
-  printf 'error: prepared source archive not found: %s\n' "$source_archive" >&2
+if [ ! -f "$compiled_archive" ]; then
+  printf 'error: compiled kernel archive not found: %s\n' "$compiled_archive" >&2
   exit 1
 fi
 
@@ -63,26 +63,25 @@ if [ -n "$input_public_key" ] && [ -z "$input_private_key" ]; then
 fi
 
 apk add \
-  alpine-sdk argp-standalone bash bc binutils bison bpftool ccache cmake \
+  alpine-sdk argp-standalone bash bc binutils bison bpftool cmake \
   diffutils doas elfutils-dev findutils flex gawk git gmp-dev installkernel \
   linux-headers mkinitfs mpc1-dev mpfr-dev musl-obstack-dev openssl-dev perl \
   pkgconf python3 rsync sed tar xz zlib-dev \
   zstd
 
-bash "$script_dir/build_pahole.sh" /tmp/dwarves-v1.31
 actual_carch=$(apk --print-arch)
 if [ "$actual_carch" != "$expected_carch" ]; then
   printf 'error: expected Alpine architecture %s, got %s\n' "$expected_carch" "$actual_carch" >&2
   exit 1
 fi
 
-localversion=$(tar --zstd -xOf "$source_archive" linux/.config \
+localversion=$(tar --zstd -xOf "$compiled_archive" linux/.config \
   | sed -n 's/^CONFIG_LOCALVERSION="\(.*\)"$/\1/p')
 kernel_release=$kernel_version$localversion
 
 rm -rf "$work_dir"
 mkdir -p "$package_dir" "$output_dir"
-cp "$source_archive" "$package_dir/prepared-kernel.tar.zst"
+cp "$compiled_archive" "$package_dir/compiled-kernel.tar.zst"
 sed \
   -e "s/@KERNEL_VERSION@/$kernel_version/g" \
   -e "s/@MAKE_VERBOSITY@/$kernel_make_verbosity/g" \
@@ -103,12 +102,8 @@ printf 'permit nopass builder as root\n' > /etc/doas.d/abuild.conf
 mkdir -p /home/builder/.abuild /home/builder/packages
 chown -R builder:abuild "$work_dir" /home/builder/.abuild /home/builder/packages
 
-export CCACHE_DIR=${CCACHE_DIR:-$repo_root/.ccache/apk/$build_id-$arch_arg}
-mkdir -p "$CCACHE_DIR"
-chown -R builder:abuild "$CCACHE_DIR"
-
-su builder -c "cd '$package_dir' && CCACHE_DIR='$CCACHE_DIR' abuild checksum"
-su builder -c "cd '$package_dir' && CCACHE_DIR='$CCACHE_DIR' abuild -r validate clean fetch unpack prepare build"
+su builder -c "cd '$package_dir' && abuild checksum"
+su builder -c "cd '$package_dir' && abuild -r validate clean fetch unpack prepare build"
 
 signing_private_key=/home/builder/.abuild/cloud-kernel-bbrv3.rsa
 signing_public_key=$signing_private_key.pub
@@ -152,7 +147,7 @@ else
 fi
 
 install -m 0644 "$signing_public_key" "/etc/apk/keys/$(basename "$signing_public_key")"
-su builder -c "cd '$package_dir' && CCACHE_DIR='$CCACHE_DIR' PACKAGER_PRIVKEY='$signing_private_key' abuild rootpkg"
+su builder -c "cd '$package_dir' && PACKAGER_PRIVKEY='$signing_private_key' abuild rootpkg"
 
 find /home/builder/packages -type f -name '*.apk' -exec cp -v {} "$output_dir"/ \;
 cp -v "$signing_public_key" "$output_dir"/

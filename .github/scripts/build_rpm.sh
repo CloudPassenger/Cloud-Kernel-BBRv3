@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build one distribution-neutral RPM set from a prepared kernel archive.
+# Build one distribution-neutral RPM set from an already-compiled kernel archive.
 set -euo pipefail
 
 usage() {
-  printf 'usage: %s <kernel-version> <arch> <build-id> <source-archive> <output-dir>\n' "$(basename "$0")" >&2
+  printf 'usage: %s <kernel-version> <arch> <build-id> <compiled-archive> <output-dir>\n' "$(basename "$0")" >&2
   exit 1
 }
 
@@ -12,7 +12,7 @@ usage() {
 kernel_version=$1
 arch_arg=$2
 build_id=$3
-source_archive=$(realpath "$4")
+compiled_archive=$(realpath "$4")
 output_dir=$(realpath -m "$5")
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$script_dir/../.." && pwd)
@@ -43,8 +43,8 @@ case "$arch_arg" in
     ;;
 esac
 
-if [ ! -f "$source_archive" ]; then
-  printf 'error: prepared source archive not found: %s\n' "$source_archive" >&2
+if [ ! -f "$compiled_archive" ]; then
+  printf 'error: compiled kernel archive not found: %s\n' "$compiled_archive" >&2
   exit 1
 fi
 
@@ -53,38 +53,20 @@ if command -v dnf >/dev/null 2>&1; then
     bash bc binutils bison cmake diffutils elfutils-devel elfutils-libelf-devel \
     findutils flex gcc git gzip hostname kmod make openssl openssl-devel patch \
     perl python3 rpm-build rsync tar xz zlib-devel zstd
-  if ! command -v ccache >/dev/null 2>&1; then
-    dnf -y install ccache || {
-      dnf -y install epel-release
-      dnf -y install ccache
-    }
-  fi
 else
   printf 'error: dnf is required for RPM builds\n' >&2
   exit 1
 fi
 
-bash "$script_dir/build_pahole.sh" "/tmp/dwarves-v1.31"
-
 rm -rf "$work_dir"
 mkdir -p "$work_dir" "$output_dir"
-tar --zstd -xf "$source_archive" -C "$work_dir"
+tar --zstd -xf "$compiled_archive" -C "$work_dir"
 
 kernel_dir=$work_dir/linux
 if [ ! -f "$kernel_dir/.config" ]; then
-  printf 'error: prepared kernel config not found\n' >&2
+  printf 'error: compiled kernel config not found\n' >&2
   exit 1
 fi
-
-
-export CCACHE_DIR=${CCACHE_DIR:-$repo_root/.ccache/rpm/$build_id-$arch_arg}
-mkdir -p "$CCACHE_DIR"
-
-make -C "$kernel_dir" \
-  ARCH="$kernel_arch" \
-  CC="ccache gcc" \
-  HOSTCC="ccache gcc" \
-  olddefconfig
 
 actual_release=$(make -s -C "$kernel_dir" ARCH="$kernel_arch" kernelrelease)
 case "$actual_release" in
@@ -94,6 +76,11 @@ case "$actual_release" in
     exit 1
     ;;
 esac
+
+# Refresh host-side build tooling (fixdep, modpost, sign-file, the Kconfig
+# frontend, ...) against Rocky Linux's own libc. The compiled vmlinux/*.ko
+# objects were already built once (by build_kernel.sh) and stay untouched.
+make -C "$kernel_dir" ARCH="$kernel_arch" CC=gcc HOSTCC=gcc modules_prepare
 
 build_log=$work_dir/rpmbuild.log
 set +e

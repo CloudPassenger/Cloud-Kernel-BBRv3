@@ -14,13 +14,11 @@ makedepends=(
   bc
   binutils
   bison
-  ccache
   flex
   gcc
   libelf
   make
   openssl
-  pahole
   perl
   python
   rsync
@@ -31,7 +29,7 @@ options=(
   !debug
   !strip
 )
-source=(prepared-kernel.tar.zst)
+source=(compiled-kernel.tar.zst)
 sha256sums=('@SOURCE_SHA256@')
 _kernel_release=@KERNEL_RELEASE@
 _make_verbosity=@MAKE_VERBOSITY@
@@ -51,14 +49,15 @@ prepare() {
 
 build() {
   cd linux
-  make -j"$(nproc)" --output-sync=target \
+
+  # Refresh host-side build tooling (fixdep, modpost, sign-file, ...)
+  # against Arch's own libc. The vmlinux/*.ko objects were already
+  # compiled once by build_kernel.sh and are left untouched.
+  make ARCH=x86 \
     V="$_make_verbosity" \
-    ARCH=x86 \
-    CC='ccache gcc' \
-    HOSTCC='ccache gcc' \
-    KBUILD_BUILD_USER=cloudpassenger \
-    KBUILD_BUILD_HOST=archlinux \
-    KBUILD_BUILD_VERSION="$pkgrel-Arch"
+    CC=gcc \
+    HOSTCC=gcc \
+    modules_prepare
 }
 
 _package() {

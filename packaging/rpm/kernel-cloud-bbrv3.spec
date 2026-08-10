@@ -16,7 +16,6 @@ BuildRequires:  bash
 BuildRequires:  bc
 BuildRequires:  binutils
 BuildRequires:  bison
-BuildRequires:  ccache
 BuildRequires:  elfutils-libelf-devel
 BuildRequires:  flex
 BuildRequires:  gcc
@@ -59,18 +58,19 @@ external modules for kernel %{kernel_release}.
 
 %build
 cd %{kernel_source_dir}
-make ARCH=%{kernel_arch} olddefconfig
-make -j%{_smp_build_ncpus} --output-sync=target \
-  V=%{kernel_make_verbosity} \
-  ARCH=%{kernel_arch} \
-  CC="ccache gcc" \
-  HOSTCC="ccache gcc" \
-  KBUILD_BUILD_VERSION=%{release}
 actual_release=$(make -s ARCH=%{kernel_arch} kernelrelease)
 if [ "$actual_release" != "%{kernel_release}" ]; then
   echo "error: expected kernel release %{kernel_release}, got $actual_release" >&2
   exit 1
 fi
+# Refresh host-side build tooling (fixdep, modpost, sign-file, ...) against
+# this container's own libc. The vmlinux/*.ko objects were already compiled
+# once by build_kernel.sh and are left untouched by this step.
+make ARCH=%{kernel_arch} \
+  V=%{kernel_make_verbosity} \
+  CC=gcc \
+  HOSTCC=gcc \
+  modules_prepare
 
 %install
 cd %{kernel_source_dir}

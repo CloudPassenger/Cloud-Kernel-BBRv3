@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build one Arch Linux x86_64 package set from a prepared kernel archive.
+# Build one Arch Linux x86_64 package set from an already-compiled kernel archive.
 set -euo pipefail
 
 usage() {
-  printf 'usage: %s <kernel-version> <arch> <build-id> <source-archive> <output-dir>\n' "$(basename "$0")" >&2
+  printf 'usage: %s <kernel-version> <arch> <build-id> <compiled-archive> <output-dir>\n' "$(basename "$0")" >&2
   exit 1
 }
 
@@ -12,7 +12,7 @@ usage() {
 kernel_version=$1
 arch_arg=$2
 build_id=$3
-source_archive=$(realpath "$4")
+compiled_archive=$(realpath "$4")
 output_dir=$(realpath -m "$5")
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$script_dir/../.." && pwd)
@@ -42,8 +42,8 @@ case "$arch_arg" in
     ;;
 esac
 
-if [ ! -f "$source_archive" ]; then
-  printf 'error: prepared source archive not found: %s\n' "$source_archive" >&2
+if [ ! -f "$compiled_archive" ]; then
+  printf 'error: compiled kernel archive not found: %s\n' "$compiled_archive" >&2
   exit 1
 fi
 if ! command -v pacman >/dev/null 2>&1; then
@@ -52,20 +52,18 @@ if ! command -v pacman >/dev/null 2>&1; then
 fi
 
 pacman -Syu --noconfirm --needed \
-  base-devel bc bison ccache cmake flex git kmod libelf mkinitcpio openssl \
-  pahole python rsync xxhash zstd
+  base-devel bc bison cmake flex git kmod libelf mkinitcpio openssl \
+  python rsync xxhash zstd
 
-bash "$script_dir/build_pahole.sh" /tmp/dwarves-v1.31
-
-localversion=$(tar --zstd -xOf "$source_archive" linux/.config \
+localversion=$(tar --zstd -xOf "$compiled_archive" linux/.config \
   | sed -n 's/^CONFIG_LOCALVERSION="\(.*\)"$/\1/p')
 kernel_release=$kernel_version$localversion
-source_sha256=$(sha256sum "$source_archive")
+source_sha256=$(sha256sum "$compiled_archive")
 source_sha256=${source_sha256%% *}
 
 rm -rf "$work_dir"
 mkdir -p "$package_dir" "$package_output" "$output_dir"
-cp "$source_archive" "$package_dir/prepared-kernel.tar.zst"
+cp "$compiled_archive" "$package_dir/compiled-kernel.tar.zst"
 sed \
   -e "s/@KERNEL_VERSION@/$kernel_version/g" \
   -e "s/@KERNEL_RELEASE@/$kernel_release/g" \
@@ -76,13 +74,9 @@ sed \
 if ! id builder >/dev/null 2>&1; then
   useradd --create-home --shell /bin/bash builder
 fi
-
-export CCACHE_DIR=${CCACHE_DIR:-$repo_root/.ccache/arch/$build_id-$arch_arg}
-mkdir -p "$CCACHE_DIR"
-chown -R builder:builder "$work_dir" "$CCACHE_DIR"
+chown -R builder:builder "$work_dir"
 
 runuser -u builder -- env \
-  CCACHE_DIR="$CCACHE_DIR" \
   MAKEFLAGS="-j$(nproc)" \
   PKGDEST="$package_output" \
   makepkg \

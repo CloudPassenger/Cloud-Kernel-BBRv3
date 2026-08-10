@@ -1,0 +1,11 @@
+Package: linux-libc-dev
+Version: @PACKAGE_VERSION@
+Architecture: @DEBARCH@
+Maintainer: @MAINTAINER@
+Section: devel
+Priority: optional
+Provides: linux-kernel-headers
+Multi-Arch: same
+Description: Linux support headers for userspace development
+ This package provides userspace headers from the Linux kernel. These headers
+ are used by the installed headers for GNU glibc and other system libraries.
