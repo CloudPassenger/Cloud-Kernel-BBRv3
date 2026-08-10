@@ -108,8 +108,10 @@ make ARCH=%{kernel_arch} run-command \
   KBUILD_RUN_COMMAND="${PWD}/scripts/package/install-extmod-build %{buildroot}/usr/src/kernels/%{kernel_release}"
 # RPM's brp-mangle-shebangs refuses ambiguous "#!/usr/bin/env python" shebangs;
 # fix them up explicitly instead of patching the vendored kernel source.
-find %{buildroot}/usr/src/kernels/%{kernel_release} -name '*.py' -print0 \
-  | xargs -0 -r sed -i '1s@^#!/usr/bin/env python$@#!/usr/bin/env python3@'
+find %{buildroot}/usr/src/kernels/%{kernel_release} -type f -print0 \
+  | xargs -0 -r -I{} sh -c '\
+      [ "$(head -n1 "{}" 2>/dev/null)" = "#!/usr/bin/env python" ] \
+        && sed -i "1s@.*@#!/usr/bin/env python3@" "{}"; :'
 mkdir -p %{buildroot}/lib/modules/%{kernel_release}
 ln -s /usr/src/kernels/%{kernel_release} \
   %{buildroot}/lib/modules/%{kernel_release}/build
