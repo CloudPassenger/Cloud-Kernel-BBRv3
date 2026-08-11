@@ -133,6 +133,8 @@ AFD6BDBFEBB9105077C4CA41399953F30E337E5E
 
 If no fingerprint is set, the installer still verifies the release manifest, checksums, and package signatures, but it cannot pin the public key's identity. Verify the fingerprint through a trusted channel and set it to protect against simultaneous replacement of the release key and release artifacts.
 
+On Alpine Linux, the installer detects and updates every supported bootloader configuration that is present. Extlinux uses `/etc/update-extlinux.conf` with `update-extlinux`, or updates an existing `/boot/extlinux.conf` or `/boot/syslinux/syslinux.cfg` directly when the source configuration is absent. GRUB BIOS and GRUB UEFI use `grub-mkconfig`; the installer parses the generated `cloud-bbrv3` menu-entry ID and writes it to `GRUB_DEFAULT` in `/etc/default/grub`. If no supported configuration is found, the new kernel is missing from the generated menu, or validation fails, the packages remain installed but automatic reboot is disabled. Limine, rEFInd, direct EFI Stub, provider-managed boot, and containers that share the host kernel still require manual handling.
+
 ### Prebuilt packages
 
 x86_64 releases include DEB, RPM, APK, and Arch Linux packages; arm64 releases include DEB, RPM, and APK packages. RPMs target Fedora, RHEL, Rocky Linux, AlmaLinux, CentOS Stream, and Oracle Linux. APKs target Alpine Linux, while Arch Linux packages are built in the official `archlinux:base-devel` environment. RPMs carry native OpenPGP signatures, APKs use a persistent Alpine RSA key, and each Arch Linux package has a detached `.sig` from the release OpenPGP key. A signed `SHA256SUMS.asc` manifest covers every release asset, and the installer verifies all signatures and checksums before invoking the package manager.

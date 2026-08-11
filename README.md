@@ -133,6 +133,8 @@ AFD6BDBFEBB9105077C4CA41399953F30E337E5E
 
 若不设置指纹，安装脚本仍会验证 Release manifest、校验和与软件包签名，但不会钉扎公钥身份；建议通过可信渠道核对并设置上述指纹，防止 Release 公钥与发布产物被同时替换。
 
+在 Alpine Linux 上，安装脚本会检测并更新当前存在的受支持引导器配置：Extlinux 使用 `/etc/update-extlinux.conf` 与 `update-extlinux`，缺少源配置时可直接更新现有 `/boot/extlinux.conf` 或 `/boot/syslinux/syslinux.cfg`；GRUB BIOS 与 GRUB UEFI 使用 `grub-mkconfig` 生成菜单，脚本从生成结果中解析 `cloud-bbrv3` 菜单项 ID，并写入 `/etc/default/grub` 的 `GRUB_DEFAULT`。如果未检测到受支持的配置、菜单中缺少新内核，或配置校验失败，脚本会保留已安装软件包但禁用自动重启，避免在引导状态不明确时无人值守重启。Limine、rEFInd、直接 EFI Stub、宿主机托管引导和共享宿主机内核的容器仍需手动处理。
+
 ### 预构建软件包
 
 x86_64 Release 提供 DEB、RPM、APK 和 Arch Linux 软件包，arm64 Release 提供 DEB、RPM 和 APK。RPM 包适用于 Fedora、RHEL、Rocky Linux、AlmaLinux、CentOS Stream 与 Oracle Linux；APK 包适用于 Alpine Linux；Arch Linux 包使用官方 `archlinux:base-devel` 环境构建。RPM 使用 OpenPGP 原生签名，APK 使用固定的 Alpine RSA 密钥签名，Arch Linux 软件包使用同一 OpenPGP 发布密钥生成独立的 `.sig` 签名，所有 Release 产物均附有 `SHA256SUMS.asc` 校验清单。安装脚本在调用包管理器前会验证签名和校验和。

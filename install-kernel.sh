@@ -37,6 +37,7 @@ SIGNING_PUBLIC_KEY_NAME="cloud-kernel-signing.asc"
 APK_PUBLIC_KEY_NAME="cloud-kernel-bbrv3.rsa.pub"
 CHECKSUM_MANIFEST_NAME="SHA256SUMS"
 CHECKSUM_SIGNATURE_NAME="SHA256SUMS.asc"
+INSTALLER_ROOT=""
 
 # Text colors
 RED='\033[0;31m'
@@ -87,8 +88,11 @@ STRINGS[en,suffix_detected]="Kernel suffix detected:"
 STRINGS[en,no_suffix_warning]="Note: this release carries no kernel suffix, so it may conflict with the distribution kernel of the same version."
 STRINGS[en,boot_entry_missing]="Warning: the expected boot image was not found, please check the boot loader:"
 STRINGS[en,boot_entry_found]="Installed boot image:"
-STRINGS[en,apk_boot_default_set]="Set extlinux default boot flavor to:"
-STRINGS[en,apk_boot_default_skip]="No /etc/update-extlinux.conf found (extlinux not in use); configure your bootloader manually to boot the new kernel by default."
+STRINGS[en,apk_extlinux_default_set]="Set extlinux default boot flavor to:"
+STRINGS[en,apk_grub_default_set]="Set GRUB default boot entry to:"
+STRINGS[en,apk_bootloader_not_found]="No supported Alpine bootloader configuration found; configure the active bootloader manually."
+STRINGS[en,apk_bootloader_update_failed]="Failed to make the new kernel the default in every detected Alpine bootloader configuration."
+STRINGS[en,apk_auto_reboot_disabled]="Automatic reboot disabled because bootloader configuration was not completed safely."
 STRINGS[en,created_dir]="Created download directory:"
 STRINGS[en,downloading_file]="Downloading:"
 STRINGS[en,download_success]="Successfully downloaded all kernel packages."
@@ -168,8 +172,11 @@ STRINGS[zh,suffix_detected]="检测到内核后缀："
 STRINGS[zh,no_suffix_warning]="注意：此版本不带内核后缀，可能与同版本号的发行版官方内核冲突。"
 STRINGS[zh,boot_entry_missing]="警告：未找到预期的启动镜像，请检查引导器配置："
 STRINGS[zh,boot_entry_found]="已安装启动镜像："
-STRINGS[zh,apk_boot_default_set]="已将 extlinux 默认启动内核设置为："
-STRINGS[zh,apk_boot_default_skip]="未找到 /etc/update-extlinux.conf（未使用 extlinux 引导器）；请手动配置引导器以默认启动新内核。"
+STRINGS[zh,apk_extlinux_default_set]="已将 extlinux 默认启动内核设置为："
+STRINGS[zh,apk_grub_default_set]="已将 GRUB 默认启动项设置为："
+STRINGS[zh,apk_bootloader_not_found]="未找到受支持的 Alpine 引导器配置；请手动配置当前使用的引导器。"
+STRINGS[zh,apk_bootloader_update_failed]="未能在所有检测到的 Alpine 引导器配置中安全地将新内核设为默认项。"
+STRINGS[zh,apk_auto_reboot_disabled]="引导器配置未安全完成，已禁用自动重启。"
 STRINGS[zh,created_dir]="已创建下载目录："
 STRINGS[zh,downloading_file]="正在下载："
 STRINGS[zh,download_success]="成功下载所有内核包。"
@@ -928,28 +935,202 @@ detect_kernel_release() {
     fi
 }
 
-# Ensure the newly installed kernel becomes the extlinux boot default.
-# Alpine's kernel packages carry no bootloader integration of their own
-# (upstream linux-lts/linux-virt ship no install= trigger); the syslinux
-# package's own /boot trigger regenerates extlinux.conf on every kernel
-# install, but it only honors whatever "default=" flavor is already
-# pinned in /etc/update-extlinux.conf (typically the stock virt/lts
-# flavor), so a freshly installed cloud-bbrv3 kernel is added to the
-# boot menu but never becomes the default without this step.
-configure_apk_boot_default() {
-    local extlinux_conf="/etc/update-extlinux.conf"
-    if [ ! -f "$extlinux_conf" ]; then
-        print_colored "${YELLOW}" "$(get_string apk_boot_default_skip)"
-        return
+# Alpine installations commonly use extlinux for legacy BIOS and GRUB for
+# UEFI, but GRUB BIOS and custom layouts are also valid. Configure every
+# supported bootloader found so stale co-installed files cannot hide the
+# configuration that actually controls the next boot.
+installer_path() {
+    printf '%s%s\n' "$INSTALLER_ROOT" "$1"
+}
+
+set_config_assignment() {
+    local config_file="$1"
+    local key="$2"
+    local value="$3"
+    local quote_value="${4:-false}"
+    local replacement temp_file
+
+    if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || \
+       [[ ! "$value" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+        return 1
     fi
 
-    if grep -q '^default=' "$extlinux_conf"; then
-        run_as_root sed -i 's/^default=.*/default=cloud-bbrv3/' "$extlinux_conf"
+    if [ "$quote_value" = true ]; then
+        replacement="${key}=\"${value}\""
     else
-        run_as_root sh -c "printf 'default=cloud-bbrv3\n' >> '$extlinux_conf'"
+        replacement="${key}=${value}"
     fi
-    run_as_root update-extlinux --warn-only
-    print_colored "${GREEN}" "✓ $(get_string apk_boot_default_set) cloud-bbrv3"
+
+    temp_file=$(mktemp) || return 1
+    if [ -f "$config_file" ] && ! cat "$config_file" > "$temp_file"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    if grep -q "^[[:space:]]*${key}=" "$temp_file"; then
+        sed -i "s|^[[:space:]]*${key}=.*|${replacement}|" "$temp_file"
+    else
+        printf '\n%s\n' "$replacement" >> "$temp_file"
+    fi
+
+    # Positional parameters are expanded by the privileged child shell.
+    # shellcheck disable=SC2016
+    if ! run_as_root sh -c 'cat "$1" > "$2"' sh "$temp_file" "$config_file"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    rm -f "$temp_file"
+}
+
+extlinux_cloud_is_default() {
+    local boot_config="$1"
+
+    awk '
+        /^[[:space:]]*LABEL[[:space:]]+/ {
+            in_cloud = ($2 == "cloud-bbrv3")
+        }
+        in_cloud && /^[[:space:]]*MENU[[:space:]]+DEFAULT[[:space:]]*$/ {
+            found = 1
+        }
+        END { exit(found ? 0 : 1) }
+    ' "$boot_config"
+}
+
+set_extlinux_menu_default() {
+    local boot_config="$1"
+    local temp_file
+
+    temp_file=$(mktemp) || return 1
+    if ! awk '
+        /^[[:space:]]*MENU[[:space:]]+DEFAULT[[:space:]]*$/ { next }
+        { print }
+        /^[[:space:]]*LABEL[[:space:]]+cloud-bbrv3([[:space:]]|$)/ {
+            print "  MENU DEFAULT"
+            found = 1
+        }
+        END { if (!found) exit 1 }
+    ' "$boot_config" > "$temp_file"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    # Positional parameters are expanded by the privileged child shell.
+    # shellcheck disable=SC2016
+    if ! run_as_root sh -c 'cat "$1" > "$2"' sh "$temp_file" "$boot_config"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    rm -f "$temp_file"
+    extlinux_cloud_is_default "$boot_config"
+}
+
+configure_apk_extlinux_default() {
+    local source_config="$1"
+    local boot_config="$2"
+
+    set_config_assignment "$source_config" default cloud-bbrv3 || return 1
+    run_as_root update-extlinux --warn-only || return 1
+    [ -f "$boot_config" ] || return 1
+    extlinux_cloud_is_default "$boot_config" || return 1
+
+    print_colored "${GREEN}" "✓ $(get_string apk_extlinux_default_set) cloud-bbrv3"
+}
+
+find_apk_grub_config() {
+    local candidate
+
+    for candidate in \
+        "$(installer_path /boot/grub/grub.cfg)" \
+        "$(installer_path /boot/grub2/grub.cfg)"; do
+        if [ -f "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+configure_apk_grub_default() {
+    local grub_config="$1"
+    local grub_defaults="$2"
+    local entry_id
+
+    run_as_root grub-mkconfig -o "$grub_config" || return 1
+    entry_id=$(sed -n \
+        "s/.*menuentry_id_option '\([^']*cloud-bbrv3[^']*\)'.*/\1/p" \
+        "$grub_config" | sed -n '1p')
+    if [[ ! "$entry_id" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+        return 1
+    fi
+
+    set_config_assignment "$grub_defaults" GRUB_DEFAULT "$entry_id" true || return 1
+    run_as_root grub-mkconfig -o "$grub_config" || return 1
+    grep -Fq "menuentry_id_option '$entry_id'" "$grub_config" || return 1
+    grep -Fq 'vmlinuz-cloud-bbrv3' "$grub_config" || return 1
+    grep -Fq 'initramfs-cloud-bbrv3' "$grub_config" || return 1
+
+    if command -v grub-script-check >/dev/null 2>&1; then
+        grub-script-check "$grub_config" || return 1
+    fi
+
+    print_colored "${GREEN}" "✓ $(get_string apk_grub_default_set) $entry_id"
+}
+
+configure_apk_boot_default() {
+    local extlinux_source extlinux_generated grub_config grub_defaults boot_config
+    local attempted=false
+    local configured=false
+    local failed=false
+
+    extlinux_source=$(installer_path /etc/update-extlinux.conf)
+    extlinux_generated=$(installer_path /boot/extlinux.conf)
+    grub_defaults=$(installer_path /etc/default/grub)
+
+    if [ -f "$extlinux_source" ]; then
+        attempted=true
+        if command -v update-extlinux >/dev/null 2>&1 && \
+           configure_apk_extlinux_default "$extlinux_source" "$extlinux_generated"; then
+            configured=true
+        else
+            failed=true
+        fi
+    else
+        for boot_config in \
+            "$extlinux_generated" \
+            "$(installer_path /boot/syslinux/syslinux.cfg)"; do
+            [ -f "$boot_config" ] || continue
+            attempted=true
+            if set_extlinux_menu_default "$boot_config"; then
+                configured=true
+                print_colored "${GREEN}" "✓ $(get_string apk_extlinux_default_set) cloud-bbrv3"
+            else
+                failed=true
+            fi
+        done
+    fi
+
+    if grub_config=$(find_apk_grub_config); then
+        attempted=true
+        if command -v grub-mkconfig >/dev/null 2>&1 && \
+           configure_apk_grub_default "$grub_config" "$grub_defaults"; then
+            configured=true
+        else
+            failed=true
+        fi
+    fi
+
+    if [ "$attempted" = false ]; then
+        print_colored "${YELLOW}" "$(get_string apk_bootloader_not_found)"
+        return 1
+    fi
+
+    if [ "$failed" = true ] || [ "$configured" = false ]; then
+        print_colored "${YELLOW}" "$(get_string apk_bootloader_update_failed)"
+        return 1
+    fi
 }
 
 # Install kernel packages
@@ -1016,7 +1197,10 @@ install_packages() {
                 exit 1
             fi
             detect_kernel_release
-            configure_apk_boot_default
+            if ! configure_apk_boot_default; then
+                AUTO_REBOOT=false
+                print_colored "${YELLOW}" "$(get_string apk_auto_reboot_disabled)"
+            fi
             ;;
         pacman)
             local arch_packages=()

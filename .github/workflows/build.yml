@@ -807,6 +807,9 @@ jobs:
       matrix:
         version: ['3.21', '3.22', '3.23', '3.24']
     steps:
+      - name: Checkout Workflow Source Code
+        uses: actions/checkout@v7
+
       - name: Download Generic APK Packages
         uses: actions/download-artifact@v8
         with:
@@ -833,6 +836,16 @@ jobs:
               apk del linux-cloud-bbrv3-dev linux-cloud-bbrv3
               [ ! -e /boot/vmlinuz-cloud-bbrv3 ]
               [ ! -e "/lib/modules/$release" ]
+            '
+
+      - name: Validate Installer Bootloader Integration
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
+            alpine:${{ matrix.version }} \
+            sh -euxc '
+              apk add --no-cache bash
+              bash /workspace/.github/scripts/test_install_kernel_bootloaders.sh
             '
 
   create-release:
