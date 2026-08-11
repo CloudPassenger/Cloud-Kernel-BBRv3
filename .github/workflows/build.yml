@@ -1,5 +1,11 @@
 name: Build Cloud Kernel Packages
 
+run-name: >-
+  ${{ format('Build Cloud Kernel {0} ({1}){2}',
+  github.event.client_payload.kernel_version || inputs.kernel_version,
+  (github.event.action == 'trigger-x86_64-build' && 'x86_64') || (github.event.action == 'trigger-arm64-build' && 'arm64') || inputs.arch,
+  (github.event.client_payload.diagnostic_build == true || github.event.client_payload.diagnostic_build == 'true' || inputs.diagnostic_build == 'true') && ' [diagnostic]' || '') }}
+
 on:
   repository_dispatch:
     types: [trigger-x86_64-build, trigger-arm64-build]
