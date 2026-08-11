@@ -689,9 +689,13 @@ fetch_releases() {
         exit 1
     fi
 
-    # Extract tags and published times using jq
+    # Use the most recent asset upload time instead of the release publication
+    # time. Fall back for releases that do not contain assets.
     local releases_info
-    releases_info=$(echo "$releases_json" | jq -r '.[] | "\(.tag_name)|\(.published_at)"')
+    releases_info=$(jq -r '
+        .[]
+        | "\(.tag_name)|\((([.assets[]?.created_at] | max) // .published_at // .created_at))"
+    ' <<< "$releases_json")
 
     if [ -z "$releases_info" ] || [ "$releases_info" = "null" ]; then
         print_colored "${RED}" "$(get_string no_releases)"
@@ -701,13 +705,13 @@ fetch_releases() {
     # Filter releases by the selected series and system architecture
     local filtered_releases=()
     local series_pattern="${KERNEL_SERIES//./\\.}"
-    local release_line tag base_tag published_time
+    local release_line tag base_tag asset_upload_time
 
     while IFS= read -r release_line; do
         tag="${release_line%%|*}"
-        published_time="${release_line#*|}"
-        published_time="${published_time/T/ }"
-        published_time="${published_time%Z}"
+        asset_upload_time="${release_line#*|}"
+        asset_upload_time="${asset_upload_time/T/ }"
+        asset_upload_time="${asset_upload_time%Z}"
         base_tag="${tag%-arm64}"
 
         if [[ ! "$base_tag" =~ ^${series_pattern}\.[0-9]+$ ]]; then
@@ -715,9 +719,9 @@ fetch_releases() {
         fi
 
         if [ "$ARCH" = "amd64" ] && [[ "$tag" != *"-arm64" ]]; then
-            filtered_releases+=("$tag|$published_time")
+            filtered_releases+=("$tag|$asset_upload_time")
         elif [ "$ARCH" = "arm64" ] && [[ "$tag" = *"-arm64" ]]; then
-            filtered_releases+=("$tag|$published_time")
+            filtered_releases+=("$tag|$asset_upload_time")
         fi
     done <<< "$releases_info"
 
