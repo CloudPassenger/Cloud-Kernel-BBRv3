@@ -87,6 +87,8 @@ STRINGS[en,suffix_detected]="Kernel suffix detected:"
 STRINGS[en,no_suffix_warning]="Note: this release carries no kernel suffix, so it may conflict with the distribution kernel of the same version."
 STRINGS[en,boot_entry_missing]="Warning: the expected boot image was not found, please check the boot loader:"
 STRINGS[en,boot_entry_found]="Installed boot image:"
+STRINGS[en,apk_boot_default_set]="Set extlinux default boot flavor to:"
+STRINGS[en,apk_boot_default_skip]="No /etc/update-extlinux.conf found (extlinux not in use); configure your bootloader manually to boot the new kernel by default."
 STRINGS[en,created_dir]="Created download directory:"
 STRINGS[en,downloading_file]="Downloading:"
 STRINGS[en,download_success]="Successfully downloaded all kernel packages."
@@ -166,6 +168,8 @@ STRINGS[zh,suffix_detected]="检测到内核后缀："
 STRINGS[zh,no_suffix_warning]="注意：此版本不带内核后缀，可能与同版本号的发行版官方内核冲突。"
 STRINGS[zh,boot_entry_missing]="警告：未找到预期的启动镜像，请检查引导器配置："
 STRINGS[zh,boot_entry_found]="已安装启动镜像："
+STRINGS[zh,apk_boot_default_set]="已将 extlinux 默认启动内核设置为："
+STRINGS[zh,apk_boot_default_skip]="未找到 /etc/update-extlinux.conf（未使用 extlinux 引导器）；请手动配置引导器以默认启动新内核。"
 STRINGS[zh,created_dir]="已创建下载目录："
 STRINGS[zh,downloading_file]="正在下载："
 STRINGS[zh,download_success]="成功下载所有内核包。"
@@ -920,6 +924,30 @@ detect_kernel_release() {
     fi
 }
 
+# Ensure the newly installed kernel becomes the extlinux boot default.
+# Alpine's kernel packages carry no bootloader integration of their own
+# (upstream linux-lts/linux-virt ship no install= trigger); the syslinux
+# package's own /boot trigger regenerates extlinux.conf on every kernel
+# install, but it only honors whatever "default=" flavor is already
+# pinned in /etc/update-extlinux.conf (typically the stock virt/lts
+# flavor), so a freshly installed cloud-bbrv3 kernel is added to the
+# boot menu but never becomes the default without this step.
+configure_apk_boot_default() {
+    local extlinux_conf="/etc/update-extlinux.conf"
+    if [ ! -f "$extlinux_conf" ]; then
+        print_colored "${YELLOW}" "$(get_string apk_boot_default_skip)"
+        return
+    fi
+
+    if grep -q '^default=' "$extlinux_conf"; then
+        run_as_root sed -i 's/^default=.*/default=cloud-bbrv3/' "$extlinux_conf"
+    else
+        run_as_root sh -c "printf 'default=cloud-bbrv3\n' >> '$extlinux_conf'"
+    fi
+    run_as_root update-extlinux --warn-only
+    print_colored "${GREEN}" "✓ $(get_string apk_boot_default_set) cloud-bbrv3"
+}
+
 # Install kernel packages
 install_packages() {
     print_header "$(get_string installing)"
@@ -984,6 +1012,7 @@ install_packages() {
                 exit 1
             fi
             detect_kernel_release
+            configure_apk_boot_default
             ;;
         pacman)
             local arch_packages=()

@@ -7,7 +7,7 @@ pkgdesc="Cloud kernel with BBRv3 and custom congestion controls"
 url="https://github.com/CloudPassenger/Cloud-Kernel-BBRv3"
 arch="x86_64 aarch64"
 license="GPL-2.0-only"
-depends="initramfs-generator linux-firmware"
+depends="initramfs-generator linux-firmware-any"
 makedepends="$_depends_dev bc binutils bpftool diffutils findutils gawk
 	installkernel linux-headers openssl-dev python3 rsync sed"
 options="!strip !check"
