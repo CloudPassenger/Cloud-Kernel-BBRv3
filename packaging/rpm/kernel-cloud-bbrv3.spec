@@ -30,7 +30,6 @@ Requires(posttrans): dracut
 Requires(posttrans): kmod
 Requires(posttrans): /usr/bin/kernel-install
 Requires(preun): /usr/bin/kernel-install
-Recommends:     linux-firmware
 Provides:       installonlypkg(kernel)
 Provides:       kernel-uname-r = %{kernel_release}
 Provides:       kernel-modules-uname-r = %{kernel_release}
@@ -139,9 +138,7 @@ ln -s /usr/src/kernels/%{kernel_release} \
 for boot_file in vmlinuz System.map config; do
   source_file=/lib/modules/%{kernel_release}/${boot_file}
   target_file=/boot/${boot_file}-%{kernel_release}
-  if ! cmp --silent "$source_file" "$target_file"; then
-    cp -f "$source_file" "$target_file"
-  fi
+  cp -f "$source_file" "$target_file"
 done
 if [ -d /lib/modules/%{kernel_release}/dtb ]; then
   rm -rf /boot/dtb-%{kernel_release}

@@ -26,6 +26,7 @@ LANGUAGE="zh"  # Default language: Chinese
 SELECTED_TAG=""
 KERNEL_RELEASE=""
 AUTO_REBOOT=true
+INSTALL_HEADERS=false
 SPECIFIED_VERSION=""
 COMMAND=""
 DISTRO_ID=""
@@ -132,6 +133,7 @@ STRINGS[en,help_install_options]="Options for 'install' command:"
 STRINGS[en,help_series]="  -s, --series, --kernel-series    Select kernel series (6.12/6.18/7.1; default: 7.1)"
 STRINGS[en,help_version]="  -v, --version     Specify full kernel version (infers series when -s is omitted)"
 STRINGS[en,help_no_reboot]="  -a, --no-reboot   Skip reboot after installation"
+STRINGS[en,help_headers]="      --headers       Also install kernel headers/development files"
 STRINGS[en,help_signing_fingerprint]="      --signing-fingerprint    Optional trusted OpenPGP signing-key fingerprint"
 STRINGS[en,help_examples]="Examples:"
 STRINGS[en,help_example1]="  Install the latest kernel from the 6.18 series with English interface:"
@@ -216,6 +218,7 @@ STRINGS[zh,help_install_options]="'install' 命令的选项："
 STRINGS[zh,help_series]="  -s, --series, --kernel-series    选择内核系列 (6.12/6.18/7.1；默认：7.1)"
 STRINGS[zh,help_version]="  -v, --version     指定完整内核版本（未设置 -s 时自动推断系列）"
 STRINGS[zh,help_no_reboot]="  -a, --no-reboot   安装后不重启"
+STRINGS[zh,help_headers]="      --headers       同时安装内核头文件和开发文件"
 STRINGS[zh,help_signing_fingerprint]="      --signing-fingerprint    可选的可信 OpenPGP 签名密钥指纹"
 STRINGS[zh,help_examples]="示例："
 STRINGS[zh,help_example1]="  使用英文界面安装 6.18 系列的最新内核："
@@ -822,9 +825,14 @@ download_packages() {
             assets_json=$(jq -r '.assets[] | select(.name | endswith(".deb")) | select(.name | test("linux-(headers|image|libc-dev)")) | .browser_download_url' <<< "$release_json")
             ;;
         rpm)
+            local rpm_asset_pattern='^kernel-cloud-bbrv3-[0-9]'
+            if [ "$INSTALL_HEADERS" = true ]; then
+                rpm_asset_pattern='^kernel-cloud-bbrv3(-devel)?-[0-9]'
+            fi
             assets_json=$(jq -r \
                 --arg arch "$RPM_ARCH" \
-                '.assets[] | select(.name | test("^kernel-cloud-bbrv3(-devel)?-")) | select(.name | endswith("." + $arch + ".rpm")) | .browser_download_url' \
+                --arg pattern "$rpm_asset_pattern" \
+                '.assets[] | select(.name | test($pattern)) | select(.name | endswith("." + $arch + ".rpm")) | .browser_download_url' \
                 <<< "$release_json")
             ;;
         apk)
@@ -1177,9 +1185,17 @@ install_packages() {
             ;;
         rpm)
             local rpm_packages=()
-            mapfile -t rpm_packages < <(find "$DOWNLOAD_DIR" -name '*.rpm' | sort)
+            mapfile -t rpm_packages < <(find "$DOWNLOAD_DIR" \
+                -name 'kernel-cloud-bbrv3-[0-9]*.rpm' | sort)
+            if [ "$INSTALL_HEADERS" = true ]; then
+                local rpm_devel_packages=()
+                mapfile -t rpm_devel_packages < <(find "$DOWNLOAD_DIR" \
+                    -name 'kernel-cloud-bbrv3-devel-*.rpm' | sort)
+                rpm_packages+=("${rpm_devel_packages[@]}")
+            fi
             if [ "${#rpm_packages[@]}" -eq 0 ] || \
-               ! run_as_root dnf install -y "${rpm_packages[@]}"; then
+               ! run_as_root dnf install -y --setopt=install_weak_deps=False \
+                   "${rpm_packages[@]}"; then
                 print_colored "${RED}" "$(get_string install_failed)"
                 exit 1
             fi
@@ -1268,6 +1284,7 @@ show_help() {
     get_string help_series
     get_string help_version
     get_string help_no_reboot
+    get_string help_headers
     get_string help_signing_fingerprint
     echo ""
 
@@ -1330,6 +1347,9 @@ parse_args() {
                 ;;
             -a|--no-reboot)
                 AUTO_REBOOT=false
+                ;;
+            --headers)
+                INSTALL_HEADERS=true
                 ;;
             --signing-fingerprint)
                 i=$((i + 1))

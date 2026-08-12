@@ -530,15 +530,30 @@ jobs:
             --env KERNEL_VERSION="${{ needs.prepare.outputs.kernel_version }}" \
             "${{ matrix.image }}" \
             bash -euxo pipefail -c '
-              dnf -y --setopt=install_weak_deps=False install /packages/*.rpm
+              main_rpm=$(find /packages -name "kernel-cloud-bbrv3-[0-9]*.rpm" -print -quit)
+              devel_rpm=$(find /packages -name "kernel-cloud-bbrv3-devel-*.rpm" -print -quit)
+              [ -n "$main_rpm" ]
+              [ -n "$devel_rpm" ]
+
+              dnf -y --setopt=install_weak_deps=False install "$main_rpm"
               set -- /lib/modules/"$KERNEL_VERSION"*
               [ -d "$1" ]
               release=${1##*/}
               [ -f "/boot/vmlinuz-$release" ]
               [ -f "/boot/initramfs-$release.img" ]
+              [ ! -e "/lib/modules/$release/build" ]
+              ! rpm -q linux-firmware
+              ! rpm -q gcc
+              ! rpm -q make
+              ! rpm -q perl
+
+              dnf -y --setopt=install_weak_deps=False install "$devel_rpm"
               [ -L "/lib/modules/$release/build" ]
               [ -d "/usr/src/kernels/$release" ]
-              dnf -y --setopt=clean_requirements_on_remove=False remove kernel-cloud-bbrv3-devel kernel-cloud-bbrv3
+              rpm -q gcc make perl
+
+              dnf -y --setopt=clean_requirements_on_remove=False remove \
+                kernel-cloud-bbrv3-devel kernel-cloud-bbrv3
               [ ! -e "/lib/modules/$release" ]
               [ ! -e "/boot/vmlinuz-$release" ]
             '
