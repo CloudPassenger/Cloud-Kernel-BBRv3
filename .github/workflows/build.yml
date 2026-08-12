@@ -672,18 +672,29 @@ jobs:
             archlinux:base-devel \
             bash -euxo pipefail -c '
               pacman -Syu --noconfirm --needed mkinitcpio
-              pacman -U --noconfirm \
-                /packages/linux-cloud-bbrv3-headers-*.pkg.tar.zst \
-                /packages/linux-cloud-bbrv3-[0-9]*.pkg.tar.zst
+              runtime_pkg=$(find /packages -name "linux-cloud-bbrv3-[0-9]*.pkg.tar.zst" -print -quit)
+              headers_pkg=$(find /packages -name "linux-cloud-bbrv3-headers-*.pkg.tar.zst" -print -quit)
+              [ -n "$runtime_pkg" ]
+              [ -n "$headers_pkg" ]
+
+              pacman -U --noconfirm "$runtime_pkg" 2>&1 | tee /tmp/runtime-install.log
+              ! grep -Eq "ERROR:|command failed|image may not be complete" /tmp/runtime-install.log
               modules_dir=$(dirname "$(find /usr/lib/modules -mindepth 2 -maxdepth 2 \
                 -name pkgbase -exec grep -lx linux-cloud-bbrv3 {} \; | head -n 1)")
               release=${modules_dir##*/}
               [ -n "$release" ]
               [ -f "$modules_dir/vmlinuz" ]
+              [ ! -e "$modules_dir/build" ]
+              [ ! -e /usr/src/linux-cloud-bbrv3 ]
+              [ -f /etc/mkinitcpio.d/linux-cloud-bbrv3.preset ]
+              [ -f /etc/mkinitcpio-linux-cloud-bbrv3.conf ]
+              [ -f /boot/vmlinuz-linux-cloud-bbrv3 ]
+              [ -s /boot/initramfs-linux-cloud-bbrv3.img ]
+
+              pacman -U --noconfirm "$headers_pkg"
               [ -d "$modules_dir/build" ]
               [ -L /usr/src/linux-cloud-bbrv3 ]
-              [ -f /boot/vmlinuz-linux-cloud-bbrv3 ]
-              [ -f /boot/initramfs-linux-cloud-bbrv3.img ]
+
               pacman -Rns --noconfirm linux-cloud-bbrv3-headers linux-cloud-bbrv3
               [ ! -e "$modules_dir" ]
               [ ! -e /boot/vmlinuz-linux-cloud-bbrv3 ]

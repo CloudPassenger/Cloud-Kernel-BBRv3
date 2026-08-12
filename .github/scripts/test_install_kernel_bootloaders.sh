@@ -38,12 +38,21 @@ menuentry 'Alpine Linux, with Linux virt' --class os \$menuentry_id_option 'gnul
 }
 EOF
 if [ "${MOCK_GRUB_INCLUDE_CLOUD:-true}" = true ]; then
-    cat >> "$grub_config" <<'EOF'
+    if [ "${MOCK_GRUB_STYLE:-apk}" = arch ]; then
+        cat >> "$grub_config" <<'EOF'
+menuentry 'Arch Linux, with Linux cloud-bbrv3' --class os $menuentry_id_option 'gnulinux-cloud-bbrv3-advanced-test-root' {
+    linux /boot/vmlinuz-linux-cloud-bbrv3
+    initrd /boot/initramfs-linux-cloud-bbrv3.img
+}
+EOF
+    else
+        cat >> "$grub_config" <<'EOF'
 menuentry 'Alpine Linux, with Linux cloud-bbrv3' --class os $menuentry_id_option 'gnulinux-cloud-bbrv3-advanced-test-root' {
     linux /boot/vmlinuz-cloud-bbrv3
     initrd /boot/initramfs-cloud-bbrv3
 }
 EOF
+    fi
 fi
 MOCK
 
@@ -94,6 +103,8 @@ reset_system_root() {
     mkdir -p "$system_root/etc/default" "$system_root/boot"
     MOCK_GRUB_INCLUDE_CLOUD=true
     export MOCK_GRUB_INCLUDE_CLOUD
+    MOCK_GRUB_STYLE=apk
+    export MOCK_GRUB_STYLE
 }
 
 assert_contains() {
@@ -133,6 +144,34 @@ configure_apk_boot_default
 extlinux_cloud_is_default "$system_root/boot/extlinux.conf"
 [ "$(grep -c '^[[:space:]]*MENU[[:space:]]\+DEFAULT[[:space:]]*$' \
     "$system_root/boot/extlinux.conf")" -eq 1 ]
+
+reset_system_root
+mkdir -p "$system_root/boot/grub"
+printf '%s\n' '# initial GRUB config' > "$system_root/boot/grub/grub.cfg"
+printf '%s\n' 'GRUB_DEFAULT=0' > "$system_root/etc/default/grub"
+MOCK_GRUB_STYLE=arch
+export MOCK_GRUB_STYLE
+configure_arch_boot_default
+assert_contains 'GRUB_DEFAULT="gnulinux-cloud-bbrv3-advanced-test-root"' \
+    "$system_root/etc/default/grub"
+assert_contains 'vmlinuz-linux-cloud-bbrv3' "$system_root/boot/grub/grub.cfg"
+
+reset_system_root
+mkdir -p "$system_root/boot/loader/entries"
+printf '%s\n' 'default arch.conf' > "$system_root/boot/loader/loader.conf"
+cat > "$system_root/boot/loader/entries/arch.conf" <<'EOF'
+title Arch Linux
+linux /vmlinuz-linux
+initrd /initramfs-linux.img
+options root=UUID=test-root rw quiet
+EOF
+configure_arch_boot_default
+assert_contains 'default linux-cloud-bbrv3.conf' \
+    "$system_root/boot/loader/loader.conf"
+assert_contains 'linux   /vmlinuz-linux-cloud-bbrv3' \
+    "$system_root/boot/loader/entries/linux-cloud-bbrv3.conf"
+assert_contains 'options root=UUID=test-root rw quiet' \
+    "$system_root/boot/loader/entries/linux-cloud-bbrv3.conf"
 
 reset_system_root
 mkdir -p "$system_root/boot/grub"

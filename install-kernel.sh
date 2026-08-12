@@ -93,6 +93,11 @@ STRINGS[en,apk_extlinux_default_set]="Set extlinux default boot flavor to:"
 STRINGS[en,apk_grub_default_set]="Set GRUB default boot entry to:"
 STRINGS[en,apk_bootloader_not_found]="No supported Alpine bootloader configuration found; configure the active bootloader manually."
 STRINGS[en,apk_bootloader_update_failed]="Failed to make the new kernel the default in every detected Alpine bootloader configuration."
+STRINGS[en,arch_grub_updated]="Updated Arch GRUB configuration for the new kernel."
+STRINGS[en,arch_systemd_boot_default_set]="Set systemd-boot default entry to:"
+STRINGS[en,arch_bootloader_not_found]="No supported Arch bootloader configuration found; configure GRUB or systemd-boot manually."
+STRINGS[en,arch_bootloader_update_failed]="Failed to register the new kernel in every detected Arch bootloader configuration."
+STRINGS[en,arch_auto_reboot_disabled]="Automatic reboot disabled because Arch bootloader configuration was not completed safely."
 STRINGS[en,apk_auto_reboot_disabled]="Automatic reboot disabled because bootloader configuration was not completed safely."
 STRINGS[en,created_dir]="Created download directory:"
 STRINGS[en,downloading_file]="Downloading:"
@@ -177,6 +182,11 @@ STRINGS[zh,boot_entry_found]="已安装启动镜像："
 STRINGS[zh,apk_extlinux_default_set]="已将 extlinux 默认启动内核设置为："
 STRINGS[zh,apk_grub_default_set]="已将 GRUB 默认启动项设置为："
 STRINGS[zh,apk_bootloader_not_found]="未找到受支持的 Alpine 引导器配置；请手动配置当前使用的引导器。"
+STRINGS[zh,arch_grub_updated]="已为新内核更新 Arch GRUB 配置。"
+STRINGS[zh,arch_systemd_boot_default_set]="已将 systemd-boot 默认启动项设置为："
+STRINGS[zh,arch_bootloader_not_found]="未找到受支持的 Arch 引导器配置；请手动配置 GRUB 或 systemd-boot。"
+STRINGS[zh,arch_bootloader_update_failed]="未能在所有检测到的 Arch 引导器配置中注册新内核。"
+STRINGS[zh,arch_auto_reboot_disabled]="Arch 引导器配置未安全完成，已禁用自动重启。"
 STRINGS[zh,apk_bootloader_update_failed]="未能在所有检测到的 Alpine 引导器配置中安全地将新内核设为默认项。"
 STRINGS[zh,apk_auto_reboot_disabled]="引导器配置未安全完成，已禁用自动重启。"
 STRINGS[zh,created_dir]="已创建下载目录："
@@ -842,8 +852,13 @@ download_packages() {
                 <<< "$release_json")
             ;;
         pacman)
+            local arch_asset_pattern='^linux-cloud-bbrv3-[0-9].*-x86_64\\.pkg\\.tar\\.zst(\\.sig)?$'
+            if [ "$INSTALL_HEADERS" = true ]; then
+                arch_asset_pattern='^linux-cloud-bbrv3(-headers)?-[0-9].*-x86_64\\.pkg\\.tar\\.zst(\\.sig)?$'
+            fi
             assets_json=$(jq -r \
-                '.assets[] | select(.name | test("^linux-cloud-bbrv3(-headers)?-[0-9].*-x86_64\\.pkg\\.tar\\.zst(\\.sig)?$")) | .browser_download_url' \
+                --arg pattern "$arch_asset_pattern" \
+                '.assets[] | select(.name | test($pattern)) | .browser_download_url' \
                 <<< "$release_json")
             ;;
         *)
@@ -1141,6 +1156,137 @@ configure_apk_boot_default() {
     fi
 }
 
+find_arch_grub_config() {
+    find_apk_grub_config
+}
+
+configure_arch_grub() {
+    local grub_config="$1"
+    local grub_defaults="$(installer_path /etc/default/grub)"
+    local entry_id
+
+    run_as_root grub-mkconfig -o "$grub_config" || return 1
+    entry_id=$(sed -n \
+        "s/.*menuentry_id_option '\([^']*cloud-bbrv3[^']*\)'.*/\1/p" \
+        "$grub_config" | sed -n '1p')
+    if [[ ! "$entry_id" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+        return 1
+    fi
+
+    set_config_assignment "$grub_defaults" GRUB_DEFAULT "$entry_id" true || return 1
+    run_as_root grub-mkconfig -o "$grub_config" || return 1
+    grep -Fq "menuentry_id_option '$entry_id'" "$grub_config" || return 1
+    grep -Fq 'vmlinuz-linux-cloud-bbrv3' "$grub_config" || return 1
+    grep -Fq 'initramfs-linux-cloud-bbrv3' "$grub_config" || return 1
+
+    if command -v grub-script-check >/dev/null 2>&1; then
+        grub-script-check "$grub_config" || return 1
+    fi
+
+    print_colored "${GREEN}" "✓ $(get_string arch_grub_updated)"
+}
+
+set_loader_default() {
+    local loader_conf="$1"
+    local entry_name="$2"
+    local temp_file
+
+    temp_file=$(mktemp) || return 1
+    if [ -f "$loader_conf" ]; then
+        awk -v entry="$entry_name" '
+            /^[[:space:]]*default[[:space:]]+/ {
+                if (!done) print "default " entry
+                done = 1
+                next
+            }
+            { print }
+            END { if (!done) print "default " entry }
+        ' "$loader_conf" > "$temp_file" || return 1
+    else
+        printf 'default %s\n' "$entry_name" > "$temp_file"
+    fi
+
+    run_as_root install -Dm644 "$temp_file" "$loader_conf" || {
+        rm -f "$temp_file"
+        return 1
+    }
+    rm -f "$temp_file"
+}
+
+configure_arch_systemd_boot() {
+    local loader_root="$1"
+    local loader_conf="$loader_root/loader/loader.conf"
+    local entry_name="linux-cloud-bbrv3.conf"
+    local entry_file="$loader_root/loader/entries/$entry_name"
+    local options=""
+    local existing_entry temp_file
+
+    for existing_entry in "$loader_root"/loader/entries/*.conf; do
+        [ -f "$existing_entry" ] || continue
+        options=$(sed -n 's/^[[:space:]]*options[[:space:]]\+//p' "$existing_entry" | sed -n '1p')
+        [ -n "$options" ] && break
+    done
+    if [ -z "$options" ] && [ -z "$INSTALLER_ROOT" ] && [ -r /proc/cmdline ]; then
+        options=$(sed -E 's/(^|[[:space:]])(BOOT_IMAGE|initrd)=[^[:space:]]+//g; s/^[[:space:]]+//; s/[[:space:]]+$//' /proc/cmdline)
+    fi
+    [ -n "$options" ] || return 1
+
+    temp_file=$(mktemp) || return 1
+    cat > "$temp_file" <<EOF
+title   Cloud Kernel BBRv3
+linux   /vmlinuz-linux-cloud-bbrv3
+initrd  /initramfs-linux-cloud-bbrv3.img
+options $options
+EOF
+    run_as_root install -Dm644 "$temp_file" "$entry_file" || {
+        rm -f "$temp_file"
+        return 1
+    }
+    rm -f "$temp_file"
+    set_loader_default "$loader_conf" "$entry_name" || return 1
+    grep -Fq 'linux   /vmlinuz-linux-cloud-bbrv3' "$entry_file" || return 1
+    grep -Fq 'initrd  /initramfs-linux-cloud-bbrv3.img' "$entry_file" || return 1
+    grep -Fq "default $entry_name" "$loader_conf" || return 1
+
+    print_colored "${GREEN}" "✓ $(get_string arch_systemd_boot_default_set) $entry_name"
+}
+
+configure_arch_boot_default() {
+    local grub_config loader_root
+    local attempted=false
+    local configured=false
+    local failed=false
+
+    if grub_config=$(find_arch_grub_config); then
+        attempted=true
+        if command -v grub-mkconfig >/dev/null 2>&1 && \
+           configure_arch_grub "$grub_config"; then
+            configured=true
+        else
+            failed=true
+        fi
+    fi
+
+    for loader_root in "$(installer_path /boot)" "$(installer_path /efi)"; do
+        [ -f "$loader_root/loader/loader.conf" ] || continue
+        attempted=true
+        if configure_arch_systemd_boot "$loader_root"; then
+            configured=true
+        else
+            failed=true
+        fi
+    done
+
+    if [ "$attempted" = false ]; then
+        print_colored "${YELLOW}" "$(get_string arch_bootloader_not_found)"
+        return 1
+    fi
+    if [ "$failed" = true ] || [ "$configured" = false ]; then
+        print_colored "${YELLOW}" "$(get_string arch_bootloader_update_failed)"
+        return 1
+    fi
+}
+
 # Install kernel packages
 install_packages() {
     print_header "$(get_string installing)"
@@ -1220,11 +1366,23 @@ install_packages() {
             ;;
         pacman)
             local arch_packages=()
-            mapfile -t arch_packages < <(find "$DOWNLOAD_DIR" -name '*.pkg.tar.zst' | sort)
+            mapfile -t arch_packages < <(find "$DOWNLOAD_DIR" \
+                -name 'linux-cloud-bbrv3-[0-9]*.pkg.tar.zst' | sort)
+            if [ "$INSTALL_HEADERS" = true ]; then
+                local arch_header_packages=()
+                mapfile -t arch_header_packages < <(find "$DOWNLOAD_DIR" \
+                    -name 'linux-cloud-bbrv3-headers-*.pkg.tar.zst' | sort)
+                arch_packages+=("${arch_header_packages[@]}")
+            fi
             if [ "${#arch_packages[@]}" -eq 0 ] || \
                ! run_as_root pacman -U --noconfirm "${arch_packages[@]}"; then
                 print_colored "${RED}" "$(get_string install_failed)"
                 exit 1
+            fi
+            detect_kernel_release
+            if ! configure_arch_boot_default; then
+                AUTO_REBOOT=false
+                print_colored "${YELLOW}" "$(get_string arch_auto_reboot_disabled)"
             fi
             ;;
     esac

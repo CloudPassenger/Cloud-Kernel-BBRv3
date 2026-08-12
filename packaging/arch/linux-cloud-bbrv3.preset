@@ -1,0 +1,6 @@
+ALL_config="/etc/mkinitcpio-linux-cloud-bbrv3.conf"
+ALL_kver="/boot/vmlinuz-linux-cloud-bbrv3"
+
+PRESETS=('default')
+
+default_image="/boot/initramfs-linux-cloud-bbrv3.img"

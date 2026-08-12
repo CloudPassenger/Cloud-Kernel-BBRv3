@@ -70,6 +70,9 @@ sed \
   -e "s/@MAKE_VERBOSITY@/$kernel_make_verbosity/g" \
   -e "s/@SOURCE_SHA256@/$source_sha256/g" \
   "$repo_root/packaging/arch/PKGBUILD.in" > "$package_dir/PKGBUILD"
+cp "$repo_root/packaging/arch/linux-cloud-bbrv3.preset" \
+  "$repo_root/packaging/arch/mkinitcpio-linux-cloud-bbrv3.conf" \
+  "$package_dir/"
 
 if ! id builder >/dev/null 2>&1; then
   useradd --create-home --shell /bin/bash builder

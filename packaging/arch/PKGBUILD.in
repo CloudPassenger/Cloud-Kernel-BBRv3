@@ -29,8 +29,16 @@ options=(
   !debug
   !strip
 )
-source=(compiled-kernel.tar.zst)
-sha256sums=('@SOURCE_SHA256@')
+source=(
+  compiled-kernel.tar.zst
+  linux-cloud-bbrv3.preset
+  mkinitcpio-linux-cloud-bbrv3.conf
+)
+sha256sums=(
+  '@SOURCE_SHA256@'
+  'SKIP'
+  'SKIP'
+)
 _kernel_release=@KERNEL_RELEASE@
 _make_verbosity=@MAKE_VERBOSITY@
 
@@ -78,6 +86,10 @@ _package() {
 
   install -Dm644 "$(make -s ARCH=x86 image_name)" "$modulesdir/vmlinuz"
   printf '%s\n' "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
+  install -Dm644 "$srcdir/linux-cloud-bbrv3.preset" \
+    "$pkgdir/etc/mkinitcpio.d/$pkgbase.preset"
+  install -Dm644 "$srcdir/mkinitcpio-linux-cloud-bbrv3.conf" \
+    "$pkgdir/etc/mkinitcpio-$pkgbase.conf"
 
   ZSTD_CLEVEL=19 make ARCH=x86 \
     V="$_make_verbosity" \
