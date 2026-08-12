@@ -4,6 +4,7 @@ Architecture: @DEBARCH@
 Maintainer: @MAINTAINER@
 Section: kernel
 Priority: optional
+Depends: initramfs-tools | linux-initramfs-tool
 Description: Linux kernel, version @KERNEL_RELEASE@
  This package contains the Linux kernel, modules and corresponding other
  files, version @KERNEL_RELEASE@, built by Cloud Kernel BBRv3.

@@ -832,7 +832,14 @@ download_packages() {
 
     case "$DISTRO_FAMILY" in
         deb)
-            assets_json=$(jq -r '.assets[] | select(.name | endswith(".deb")) | select(.name | test("linux-(headers|image|libc-dev)")) | .browser_download_url' <<< "$release_json")
+            local deb_asset_pattern='^linux-image-'
+            if [ "$INSTALL_HEADERS" = true ]; then
+                deb_asset_pattern='^linux-(headers|image|libc-dev)'
+            fi
+            assets_json=$(jq -r \
+                --arg pattern "$deb_asset_pattern" \
+                '.assets[] | select(.name | endswith(".deb")) | select(.name | test($pattern)) | .browser_download_url' \
+                <<< "$release_json")
             ;;
         rpm)
             local rpm_asset_pattern='^kernel-cloud-bbrv3-[0-9]'
@@ -1293,41 +1300,19 @@ install_packages() {
 
     case "$DISTRO_FAMILY" in
         deb)
-            local install_cmd=(dpkg -i)
-            if [ "$(id -u)" -ne 0 ]; then
-                install_cmd=(sudo dpkg -i)
+            local deb_packages=()
+            mapfile -t deb_packages < <(find "$DOWNLOAD_DIR" -name 'linux-image*.deb' | sort)
+            if [ "$INSTALL_HEADERS" = true ]; then
+                local deb_development_packages=()
+                mapfile -t deb_development_packages < <(find "$DOWNLOAD_DIR" \
+                    \( -name 'linux-headers*.deb' -o -name 'linux-libc-dev*.deb' \) | sort)
+                deb_packages+=("${deb_development_packages[@]}")
             fi
-
-            local deb
-            local headers=()
-            mapfile -t headers < <(find "$DOWNLOAD_DIR" -name 'linux-headers*.deb')
-            for deb in "${headers[@]}"; do
-                print_colored "${CYAN}" "Installing: $(basename "$deb")"
-                "${install_cmd[@]}" "$deb" || {
-                    print_colored "${RED}" "$(get_string install_failed)"
-                    exit 1
-                }
-            done
-
-            local libc_dev=()
-            mapfile -t libc_dev < <(find "$DOWNLOAD_DIR" -name 'linux-libc-dev*.deb')
-            for deb in "${libc_dev[@]}"; do
-                print_colored "${CYAN}" "Installing: $(basename "$deb")"
-                "${install_cmd[@]}" "$deb" || {
-                    print_colored "${RED}" "$(get_string install_failed)"
-                    exit 1
-                }
-            done
-
-            local images=()
-            mapfile -t images < <(find "$DOWNLOAD_DIR" -name 'linux-image*.deb')
-            for deb in "${images[@]}"; do
-                print_colored "${CYAN}" "Installing: $(basename "$deb")"
-                "${install_cmd[@]}" "$deb" || {
-                    print_colored "${RED}" "$(get_string install_failed)"
-                    exit 1
-                }
-            done
+            if [ "${#deb_packages[@]}" -eq 0 ] || \
+               ! run_as_root apt-get install -y "${deb_packages[@]}"; then
+                print_colored "${RED}" "$(get_string install_failed)"
+                exit 1
+            fi
             ;;
         rpm)
             local rpm_packages=()
