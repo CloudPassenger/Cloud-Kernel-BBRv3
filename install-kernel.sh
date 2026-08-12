@@ -853,9 +853,14 @@ download_packages() {
                 <<< "$release_json")
             ;;
         apk)
+            local apk_asset_pattern='^linux-cloud-bbrv3-[0-9].*\\.apk$'
+            if [ "$INSTALL_HEADERS" = true ]; then
+                apk_asset_pattern='^linux-cloud-bbrv3(-dev)?-[0-9].*\\.apk$'
+            fi
             assets_json=$(jq -r \
                 --arg key "$APK_PUBLIC_KEY_NAME" \
-                '.assets[] | select(((.name | endswith(".apk")) and (.name | test("^linux-cloud-bbrv3(-dev)?-"))) or (.name == $key)) | .browser_download_url' \
+                --arg pattern "$apk_asset_pattern" \
+                '.assets[] | select((.name | test($pattern)) or (.name == $key)) | .browser_download_url' \
                 <<< "$release_json")
             ;;
         pacman)
@@ -1059,12 +1064,32 @@ set_extlinux_menu_default() {
 configure_apk_extlinux_default() {
     local source_config="$1"
     local boot_config="$2"
+    local entry_file="$(installer_path /etc/update-extlinux.d/cloud-bbrv3.conf)"
+    local temp_file
 
     set_config_assignment "$source_config" default cloud-bbrv3 || return 1
     run_as_root update-extlinux --warn-only || return 1
     [ -f "$boot_config" ] || return 1
-    extlinux_cloud_is_default "$boot_config" || return 1
 
+    if ! grep -Eq '^[[:space:]]*LABEL[[:space:]]+cloud-bbrv3([[:space:]]|$)' \
+        "$boot_config"; then
+        temp_file=$(mktemp) || return 1
+        cat > "$temp_file" <<'EOF'
+LABEL cloud-bbrv3
+  MENU DEFAULT
+  MENU LABEL Linux cloud-bbrv3
+  LINUX vmlinuz-cloud-bbrv3
+  INITRD initramfs-cloud-bbrv3
+EOF
+        run_as_root install -Dm644 "$temp_file" "$entry_file" || {
+            rm -f "$temp_file"
+            return 1
+        }
+        rm -f "$temp_file"
+        run_as_root update-extlinux --warn-only || return 1
+    fi
+
+    extlinux_cloud_is_default "$boot_config" || return 1
     print_colored "${GREEN}" "✓ $(get_string apk_extlinux_default_set) cloud-bbrv3"
 }
 
@@ -1337,7 +1362,14 @@ install_packages() {
                 [ -e "$apk_key" ] || continue
                 run_as_root install -Dm644 "$apk_key" "/etc/apk/keys/$(basename "$apk_key")"
             done
-            mapfile -t apk_packages < <(find "$DOWNLOAD_DIR" -name '*.apk' | sort)
+            mapfile -t apk_packages < <(find "$DOWNLOAD_DIR" \
+                -name 'linux-cloud-bbrv3-[0-9]*.apk' | sort)
+            if [ "$INSTALL_HEADERS" = true ]; then
+                local apk_dev_packages=()
+                mapfile -t apk_dev_packages < <(find "$DOWNLOAD_DIR" \
+                    -name 'linux-cloud-bbrv3-dev-*.apk' | sort)
+                apk_packages+=("${apk_dev_packages[@]}")
+            fi
             if [ "${#apk_packages[@]}" -eq 0 ] || \
                ! run_as_root apk add "${apk_packages[@]}"; then
                 print_colored "${RED}" "$(get_string install_failed)"

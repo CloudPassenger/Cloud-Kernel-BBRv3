@@ -903,26 +903,23 @@ jobs:
           name: release-apk-generic-${{ needs.prepare.outputs.arch }}
           path: packages
 
-      - name: Validate Install and Remove Lifecycle
+      - name: Validate Installer Lifecycle and Dependencies
         run: |
           docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
             --volume "$GITHUB_WORKSPACE/packages:/packages:ro" \
             alpine:${{ matrix.version }} \
             sh -euxc '
               apk update
-              for key in /packages/*.rsa.pub; do
-                install -Dm644 "$key" "/etc/apk/keys/${key##*/}"
-              done
-              apk add /packages/linux-cloud-bbrv3-[0-9]*.apk /packages/linux-cloud-bbrv3-dev-*.apk
-              release=$(cat /usr/share/kernel/cloud-bbrv3/kernel.release)
-              [ -f /boot/vmlinuz-cloud-bbrv3 ]
-              [ -f /boot/initramfs-cloud-bbrv3 ]
-              [ -d "/lib/modules/$release" ]
-              [ -L "/lib/modules/$release/build" ]
-              [ -d "/usr/src/linux-headers-$release" ]
-              apk del linux-cloud-bbrv3-dev linux-cloud-bbrv3
-              [ ! -e /boot/vmlinuz-cloud-bbrv3 ]
-              [ ! -e "/lib/modules/$release" ]
+              apk add bash linux-firmware-none
+
+              if [ "$(apk --print-arch)" = x86_64 ]; then
+                apk add syslinux
+                sed -i "s/^default=.*/default=virt/; s|^root=.*|root=/dev/vda3|" \
+                  /etc/update-extlinux.conf
+              fi
+
+              bash /workspace/.github/scripts/test_install_kernel_apk.sh /packages
             '
 
       - name: Validate Installer Bootloader Integration

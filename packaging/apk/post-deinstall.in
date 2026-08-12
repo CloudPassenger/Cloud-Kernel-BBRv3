@@ -1,8 +1,7 @@
 #!/bin/sh
 
 release=@KERNEL_RELEASE@
-rm -f "/lib/modules/$release"/modules.* \
-  "/lib/modules/$release/initramfs-suffix"
+rm -f "/lib/modules/$release"/modules.*
 rmdir "/lib/modules/$release" 2>/dev/null || true
 
 exit 0
