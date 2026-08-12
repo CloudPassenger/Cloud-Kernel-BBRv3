@@ -134,7 +134,7 @@ for hook in postinst postrm preinst prerm; do
   chmod 755 "$image_root/DEBIAN/$hook"
 done
 
-dpkg-deb --root-owner-group --build "$image_root" \
+dpkg-deb --root-owner-group -Zgzip --build "$image_root" \
   "$output_dir/linux-image-${kernel_release}_${packageversion}_${debarch}.deb"
 
 # --- linux-headers-<release> ------------------------------------------------
@@ -153,7 +153,7 @@ ln -sf "/usr/src/linux-headers-$kernel_release" \
 
 render_control "$repo_root/packaging/deb/control-headers.in" > "$headers_root/DEBIAN/control"
 
-dpkg-deb --root-owner-group --build "$headers_root" \
+dpkg-deb --root-owner-group -Zgzip --build "$headers_root" \
   "$output_dir/linux-headers-${kernel_release}_${packageversion}_${debarch}.deb"
 
 # --- linux-libc-dev ----------------------------------------------------------
@@ -172,7 +172,7 @@ mv "$libc_root/usr/include/asm" "$libc_root/usr/include/$multiarch/asm"
 
 render_control "$repo_root/packaging/deb/control-libc-dev.in" > "$libc_root/DEBIAN/control"
 
-dpkg-deb --root-owner-group --build "$libc_root" \
+dpkg-deb --root-owner-group -Zgzip --build "$libc_root" \
   "$output_dir/linux-libc-dev_${packageversion}_${debarch}.deb"
 
 cp .config "$output_dir/linux-${kernel_version}-${debarch}.config"

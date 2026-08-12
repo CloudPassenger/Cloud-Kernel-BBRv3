@@ -19,6 +19,22 @@ DISTRO_FAMILY=apk
 AUTO_REBOOT=false
 INSTALL_HEADERS=false
 
+validate_extlinux=${VALIDATE_APK_EXTLINUX:-auto}
+if [ "$validate_extlinux" = auto ]; then
+    if [ "$(apk --print-arch)" = x86_64 ]; then
+        validate_extlinux=true
+    else
+        validate_extlinux=false
+    fi
+fi
+case "$validate_extlinux" in
+    true|false) ;;
+    *)
+        printf 'error: VALIDATE_APK_EXTLINUX must be true, false, or auto\n' >&2
+        exit 1
+        ;;
+esac
+
 install_packages 2>&1 | tee /tmp/runtime-install.log
 release=$(cat /usr/share/kernel/cloud-bbrv3/kernel.release)
 
@@ -31,7 +47,7 @@ apk info -e linux-firmware-none
 ! apk info -e linux-firmware
 [ "$(apk info | grep -c '^linux-firmware')" -eq 1 ]
 
-if [ "$(apk --print-arch)" = x86_64 ]; then
+if [ "$validate_extlinux" = true ]; then
     grep -Fxq 'default=cloud-bbrv3' /etc/update-extlinux.conf
     extlinux_cloud_is_default /boot/extlinux.conf
     [ "$(grep -c '^[[:space:]]*MENU[[:space:]]\+DEFAULT[[:space:]]*$' \

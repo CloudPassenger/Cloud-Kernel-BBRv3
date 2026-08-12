@@ -911,7 +911,7 @@ jobs:
             alpine:${{ matrix.version }} \
             sh -euxc '
               apk update
-              apk add bash linux-firmware-none
+              apk add bash linux-firmware-none mkinitfs
 
               if [ "$(apk --print-arch)" = x86_64 ]; then
                 apk add syslinux
