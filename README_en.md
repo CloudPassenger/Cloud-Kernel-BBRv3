@@ -111,6 +111,15 @@ export CLOUD_KERNEL_GPG_FINGERPRINT="AFD6BDBFEBB9105077C4CA41399953F30E337E5E"
 
 # Install an exact version without rebooting (the series is inferred when omitted)
 ./install-kernel.sh install --version 6.12.21 --no-reboot
+
+# If GitHub API access fails because of a shared-IP rate limit (HTTP 403),
+# network policy, or a 10-second timeout, the installer races seven verified
+# mirrors and automatically uses the fastest successful node.
+./install-kernel.sh install --series 6.18
+
+# Optionally add a trusted self-hosted mirror to the race.
+export CLOUD_KERNEL_GITHUB_MIRROR="https://<your-trusted-github-proxy>"
+./install-kernel.sh install --series 6.18
 ```
 
 Options and commands:
@@ -124,6 +133,7 @@ Options and commands:
   - `-v, --version`: Specify a full kernel version; the series is inferred when omitted
   - `-a, --no-reboot`: Skip reboot after installation
   - `--signing-fingerprint`: Optional trusted full OpenPGP fingerprint; `CLOUD_KERNEL_GPG_FINGERPRINT` is also supported
+  - `--github-mirror URL`: Add an HTTPS GitHub mirror proxy to the automatic race; `CLOUD_KERNEL_GITHUB_MIRROR` is also supported
 
 The project's current OpenPGP primary-key fingerprint is:
 
@@ -132,6 +142,12 @@ AFD6BDBFEBB9105077C4CA41399953F30E337E5E
 ```
 
 If no fingerprint is set, the installer still verifies the release manifest, checksums, and package signatures, but it cannot pin the public key's identity. Verify the fingerprint through a trusted channel and set it to protect against simultaneous replacement of the release key and release artifacts.
+
+> [!NOTE]
+> The installer requests the official GitHub API by default. On failure, it automatically falls back to GitHub mirrors collected from the internet.
+
+> [!WARNING]
+> When a mirror is used, the installer forcibly verifies GPG signatures and file checksums. Files that fail verification are not installed.
 
 On Alpine Linux, the installer detects and updates every supported bootloader configuration that is present. Extlinux uses `/etc/update-extlinux.conf` with `update-extlinux`, or updates an existing `/boot/extlinux.conf` or `/boot/syslinux/syslinux.cfg` directly when the source configuration is absent. GRUB BIOS and GRUB UEFI use `grub-mkconfig`; the installer parses the generated `cloud-bbrv3` menu-entry ID and writes it to `GRUB_DEFAULT` in `/etc/default/grub`. If no supported configuration is found, the new kernel is missing from the generated menu, or validation fails, the packages remain installed but automatic reboot is disabled. Limine, rEFInd, direct EFI Stub, provider-managed boot, and containers that share the host kernel still require manual handling.
 

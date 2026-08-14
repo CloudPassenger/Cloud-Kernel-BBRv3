@@ -111,6 +111,14 @@ export CLOUD_KERNEL_GPG_FINGERPRINT="AFD6BDBFEBB9105077C4CA41399953F30E337E5E"
 
 # 安装指定版本的内核且安装后不重启（未指定系列时会从版本号推断）
 ./install-kernel.sh install --version 6.12.21 --no-reboot
+
+# GitHub API 因共享 IP 限流（HTTP 403）、网络策略或 10 秒无响应而失败时，
+# 安装器会并行测速 7 个已验证镜像并自动使用最快节点。
+./install-kernel.sh install --series 6.18
+
+# 可选：将可信自建镜像加入测速候选池。
+export CLOUD_KERNEL_GITHUB_MIRROR="https://<your-trusted-github-proxy>"
+./install-kernel.sh install --series 6.18
 ```
 
 脚本支持的参数：
@@ -124,6 +132,7 @@ export CLOUD_KERNEL_GPG_FINGERPRINT="AFD6BDBFEBB9105077C4CA41399953F30E337E5E"
   - `-v, --version`：指定完整的内核版本；未指定系列时自动从版本号推断
   - `-a, --no-reboot`：安装后不自动重启
   - `--signing-fingerprint`：可选；指定可信 OpenPGP 完整指纹，也可设置 `CLOUD_KERNEL_GPG_FINGERPRINT`
+  - `--github-mirror URL`：将一个 HTTPS GitHub 镜像代理加入自动测速候选池；也可设置 `CLOUD_KERNEL_GITHUB_MIRROR`
 
 项目当前默认的 OpenPGP 主密钥完整指纹为：
 
@@ -132,6 +141,12 @@ AFD6BDBFEBB9105077C4CA41399953F30E337E5E
 ```
 
 若不设置指纹，安装脚本仍会验证 Release manifest、校验和与软件包签名，但不会钉扎公钥身份；建议通过可信渠道核对并设置上述指纹，防止 Release 公钥与发布产物被同时替换。
+
+> [!NOTE]
+> 安装器默认请求官方 GitHub API；请求失败时会自动回退到通过互联网搜集的 GitHub 镜像站继续请求。
+
+> [!WARNING]
+> 使用镜像时，安装器会强制验证 GPG 签名和文件校验和；验证失败的文件不会安装。
 
 在 Alpine Linux 上，安装脚本会检测并更新当前存在的受支持引导器配置：Extlinux 使用 `/etc/update-extlinux.conf` 与 `update-extlinux`，缺少源配置时可直接更新现有 `/boot/extlinux.conf` 或 `/boot/syslinux/syslinux.cfg`；GRUB BIOS 与 GRUB UEFI 使用 `grub-mkconfig` 生成菜单，脚本从生成结果中解析 `cloud-bbrv3` 菜单项 ID，并写入 `/etc/default/grub` 的 `GRUB_DEFAULT`。如果未检测到受支持的配置、菜单中缺少新内核，或配置校验失败，脚本会保留已安装软件包但禁用自动重启，避免在引导状态不明确时无人值守重启。Limine、rEFInd、直接 EFI Stub、宿主机托管引导和共享宿主机内核的容器仍需手动处理。
 

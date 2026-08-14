@@ -15,8 +15,19 @@
 trap 'echo "Error on line $LINENO: $BASH_COMMAND"' ERR
 
 # Global variables
-REPO_URL="https://github.com/CloudPassenger/Cloud-Kernel-BBRv3"
-REPO_API="${REPO_URL/github.com/api.github.com\/repos}"
+REPO_API="https://api.github.com/repos/CloudPassenger/Cloud-Kernel-BBRv3"
+GITHUB_MIRROR="${CLOUD_KERNEL_GITHUB_MIRROR:-}"
+BUILTIN_GITHUB_MIRRORS=(
+    "https://github-proxy.memory-echoes.cn"
+    "https://gh.927223.xyz"
+    "https://github.dpik.top"
+    "https://github.tbap.top"
+    "https://cdn.akaere.online"
+    "https://gh.bugdey.us.kg"
+    "https://gh.inkchills.cn"
+)
+ACTIVE_GITHUB_MIRROR=""
+MIRROR_PROBE_DIR=""
 DOWNLOAD_DIR=""
 DOWNLOAD_DIR_IS_TEMP=false
 SUPPORTED_SERIES=("6.12" "6.18" "7.1")
@@ -35,6 +46,7 @@ DISTRO_FAMILY=""
 DISTRO_VERSION_MAJOR=""
 RPM_ARCH=""
 TRUSTED_GPG_FINGERPRINT=${CLOUD_KERNEL_GPG_FINGERPRINT:-}
+RELEASE_SIGNING_FINGERPRINT="AFD6BDBFEBB9105077C4CA41399953F30E337E5E"
 SIGNING_PUBLIC_KEY_NAME="cloud-kernel-signing.asc"
 APK_PUBLIC_KEY_NAME="cloud-kernel-bbrv3.rsa.pub"
 CHECKSUM_MANIFEST_NAME="SHA256SUMS"
@@ -71,7 +83,10 @@ STRINGS[en,architecture_not_supported]="Error: Your system architecture is not s
 STRINGS[en,arch_linux_x86_only]="Error: Official Arch Linux packages are available only for x86_64."
 STRINGS[en,detected_arch]="Detected architecture:"
 STRINGS[en,fetching_releases]="Fetching available kernel releases..."
-STRINGS[en,fetch_error]="Error fetching releases. Please check your internet connection and try again."
+STRINGS[en,fetch_error]="Error fetching releases. Check network access; the built-in mirror race also failed."
+STRINGS[en,github_mirror_fallback]="GitHub API request failed or timed out; racing built-in GitHub mirrors..."
+STRINGS[en,github_mirror_selected]="Selected fastest GitHub mirror:"
+STRINGS[en,github_mirror_fingerprint]="A GitHub mirror was used; enforcing the project's release signing-key fingerprint."
 STRINGS[en,no_releases]="No releases found in the repository."
 STRINGS[en,no_series_releases]="No releases found for the selected kernel series and architecture:"
 STRINGS[en,select_series]="Select a kernel series:"
@@ -141,6 +156,7 @@ STRINGS[en,help_version]="  -v, --version     Specify full kernel version (infer
 STRINGS[en,help_no_reboot]="  -a, --no-reboot   Skip reboot after installation"
 STRINGS[en,help_headers]="      --headers       Also install kernel headers/development files"
 STRINGS[en,help_signing_fingerprint]="      --signing-fingerprint    Optional trusted OpenPGP signing-key fingerprint"
+STRINGS[en,help_github_mirror]="      --github-mirror URL      HTTPS proxy prefix for GitHub URLs (or CLOUD_KERNEL_GITHUB_MIRROR)"
 STRINGS[en,help_examples]="Examples:"
 STRINGS[en,help_example1]="  Install the latest kernel from the 6.18 series with English interface:"
 STRINGS[en,help_example2]="  Install a specific kernel version without reboot:"
@@ -161,7 +177,10 @@ STRINGS[zh,architecture_not_supported]="错误：您的系统架构不受支持�
 STRINGS[zh,arch_linux_x86_only]="错误：官方 Arch Linux 软件包仅提供 x86_64 架构。"
 STRINGS[zh,detected_arch]="检测到的架构："
 STRINGS[zh,fetching_releases]="正在获取可用的内核版本..."
-STRINGS[zh,fetch_error]="获取版本失败。请检查您的网络连接并重试。"
+STRINGS[zh,fetch_error]="获取版本失败。请检查网络访问；内置镜像并行测速也未成功。"
+STRINGS[zh,github_mirror_fallback]="GitHub API 请求失败或超时；正在并行测速内置 GitHub 镜像..."
+STRINGS[zh,github_mirror_selected]="已选择最快的 GitHub 镜像："
+STRINGS[zh,github_mirror_fingerprint]="已使用 GitHub 镜像；将强制校验项目的发行签名密钥指纹。"
 STRINGS[zh,no_releases]="在存储库中未找到版本。"
 STRINGS[zh,no_series_releases]="未找到适用于所选内核系列和系统架构的版本："
 STRINGS[zh,select_series]="请选择内核系列："
@@ -231,6 +250,7 @@ STRINGS[zh,help_version]="  -v, --version     指定完整内核版本（未设�
 STRINGS[zh,help_no_reboot]="  -a, --no-reboot   安装后不重启"
 STRINGS[zh,help_headers]="      --headers       同时安装内核头文件和开发文件"
 STRINGS[zh,help_signing_fingerprint]="      --signing-fingerprint    可选的可信 OpenPGP 签名密钥指纹"
+STRINGS[zh,help_github_mirror]="      --github-mirror URL      GitHub URL 的 HTTPS 镜像代理前缀（或 CLOUD_KERNEL_GITHUB_MIRROR）"
 STRINGS[zh,help_examples]="示例："
 STRINGS[zh,help_example1]="  使用英文界面安装 6.18 系列的最新内核："
 STRINGS[zh,help_example2]="  安装特定版本内核且不重启："
@@ -293,13 +313,132 @@ run_as_root() {
     fi
 }
 
-# Remove only download directories created by this installer.
+# Require a safe proxy prefix before using a third-party GitHub mirror.
+validate_github_mirror() {
+    [ -n "$GITHUB_MIRROR" ] || return 0
+
+    GITHUB_MIRROR=${GITHUB_MIRROR%/}
+    if [[ ! "$GITHUB_MIRROR" =~ ^https://[^/?#[:space:]]+(/[^?#[:space:]]*)?$ ]]; then
+        print_colored "${RED}" "$(get_string github_mirror_invalid)"
+        exit 1
+    fi
+}
+
+# Prefix an absolute GitHub URL for mirrors that proxy complete URLs.
+github_mirror_url() {
+    local url="$1"
+
+    if [ -n "$ACTIVE_GITHUB_MIRROR" ]; then
+        printf '%s/%s\n' "$ACTIVE_GITHUB_MIRROR" "$url"
+    else
+        printf '%s\n' "$url"
+    fi
+}
+
+github_curl() {
+    curl -fsSL --connect-timeout 10 --max-time 10 --retry 0 "$1"
+}
+
+github_response_matches() {
+    jq -e "$2" >/dev/null 2>&1 <<< "$1"
+}
+
+# Race the requested API resource and retain the first verified mirror response.
+select_fastest_github_mirror() {
+    local url="$1"
+    local response_filter="$2"
+    local mirror response result_file response_file selected_mirror
+    local index=0 remaining=0
+    local -a mirrors=()
+    local -a pids=()
+
+    if [ -n "$GITHUB_MIRROR" ]; then
+        mirrors+=("$GITHUB_MIRROR")
+    fi
+    mirrors+=("${BUILTIN_GITHUB_MIRRORS[@]}")
+
+    MIRROR_PROBE_DIR=$(mktemp -d /var/tmp/cloud-kernel-mirrors.XXXXXX) || return 1
+    for mirror in "${mirrors[@]}"; do
+        result_file="$MIRROR_PROBE_DIR/$index.result"
+        response_file="$MIRROR_PROBE_DIR/$index.response"
+        (
+            response=$(github_curl "${mirror}/${url}" 2>/dev/null) || exit 1
+            github_response_matches "$response" "$response_filter" || exit 1
+            printf '%s' "$response" > "$response_file"
+            printf '%s\n' "$mirror" > "$result_file"
+        ) &
+        pids+=("$!")
+        index=$((index + 1))
+        remaining=$((remaining + 1))
+    done
+
+    while [ "$remaining" -gt 0 ]; do
+        if wait -n; then
+            for result_file in "$MIRROR_PROBE_DIR"/*.result; do
+                [ -s "$result_file" ] || continue
+                selected_mirror=$(<"$result_file")
+                response_file="${result_file%.result}.response"
+                [ -n "$selected_mirror" ] && [ -s "$response_file" ] || continue
+                ACTIVE_GITHUB_MIRROR="$selected_mirror"
+                GITHUB_RESPONSE=$(<"$response_file")
+                for pid in "${pids[@]}"; do
+                    kill "$pid" 2>/dev/null || true
+                done
+                for pid in "${pids[@]}"; do
+                    wait "$pid" 2>/dev/null || true
+                done
+                rm -rf -- "$MIRROR_PROBE_DIR"
+                MIRROR_PROBE_DIR=""
+                print_colored "${GREEN}" "$(get_string github_mirror_selected) $ACTIVE_GITHUB_MIRROR"
+                return 0
+            done
+        fi
+        remaining=$((remaining - 1))
+    done
+
+    rm -rf -- "$MIRROR_PROBE_DIR"
+    MIRROR_PROBE_DIR=""
+    return 1
+}
+
+# Fetch a GitHub API resource directly, then race mirrors after failure.
+github_api_get() {
+    local url="$1"
+    local response_filter="$2"
+
+    GITHUB_RESPONSE=""
+    if [ -n "$ACTIVE_GITHUB_MIRROR" ] && \
+       GITHUB_RESPONSE=$(github_curl "$(github_mirror_url "$url")") && \
+       github_response_matches "$GITHUB_RESPONSE" "$response_filter"; then
+        return 0
+    fi
+
+    ACTIVE_GITHUB_MIRROR=""
+    if GITHUB_RESPONSE=$(github_curl "$url") && \
+       github_response_matches "$GITHUB_RESPONSE" "$response_filter"; then
+        return 0
+    fi
+
+    print_colored "${YELLOW}" "$(get_string github_mirror_fallback)"
+    if ! select_fastest_github_mirror "$url" "$response_filter"; then
+        ACTIVE_GITHUB_MIRROR=""
+        return 1
+    fi
+
+    return 0
+}
+
+# Remove only temporary directories created by this installer.
 cleanup_download_dir() {
     if [ "$DOWNLOAD_DIR_IS_TEMP" = true ] && [ -n "$DOWNLOAD_DIR" ]; then
         rm -rf -- "$DOWNLOAD_DIR"
     fi
+    if [ -n "$MIRROR_PROBE_DIR" ]; then
+        rm -rf -- "$MIRROR_PROBE_DIR"
+    fi
     DOWNLOAD_DIR=""
     DOWNLOAD_DIR_IS_TEMP=false
+    MIRROR_PROBE_DIR=""
 }
 
 # Create one private, unique directory for every downloaded release asset.
@@ -376,6 +515,10 @@ normalize_fingerprint() {
 verify_downloads() {
     print_header "$(get_string verifying_downloads)"
 
+    if [ -n "$ACTIVE_GITHUB_MIRROR" ] && [ -z "$TRUSTED_GPG_FINGERPRINT" ]; then
+        TRUSTED_GPG_FINGERPRINT="$RELEASE_SIGNING_FINGERPRINT"
+        print_colored "${YELLOW}" "$(get_string github_mirror_fingerprint)"
+    fi
     if [ -n "$TRUSTED_GPG_FINGERPRINT" ]; then
         TRUSTED_GPG_FINGERPRINT=$(printf '%s' "$TRUSTED_GPG_FINGERPRINT" | normalize_fingerprint)
     fi
@@ -722,12 +865,13 @@ fetch_releases() {
     print_colored "${CYAN}" "$(get_string using_series) $KERNEL_SERIES"
 
 
-    # Get up to 100 releases so older maintained series remain selectable
+    # Get up to 100 releases so older maintained series remain selectable.
     local releases_json
-    if ! releases_json=$(curl -fsSL "${REPO_API}/releases?per_page=100"); then
+    if ! github_api_get "${REPO_API}/releases?per_page=100" 'type == "array"'; then
         print_colored "${RED}" "$(get_string fetch_error)"
         exit 1
     fi
+    releases_json=$GITHUB_RESPONSE
 
     if [ -z "$releases_json" ]; then
         print_colored "${RED}" "$(get_string fetch_error)"
@@ -851,7 +995,11 @@ download_packages() {
     print_colored "${CYAN}" "$(get_string created_dir) $DOWNLOAD_DIR"
 
     local release_json assets_json
-    release_json=$(curl -fsSL "${REPO_API}/releases/tags/${SELECTED_TAG}")
+    if ! github_api_get "${REPO_API}/releases/tags/${SELECTED_TAG}" 'type == "object" and has("assets")'; then
+        print_colored "${RED}" "$(get_string fetch_error)"
+        exit 1
+    fi
+    release_json=$GITHUB_RESPONSE
 
     case "$DISTRO_FAMILY" in
         deb)
@@ -919,7 +1067,8 @@ download_packages() {
     while IFS= read -r package_url; do
         filename=$(basename "$package_url")
         print_colored "${CYAN}" "$(get_string downloading_file) $filename"
-        if ! curl -L "$package_url" -o "${DOWNLOAD_DIR}/${filename}" --progress-bar; then
+        if ! curl -fL --connect-timeout 15 --retry 2 \
+            "$(github_mirror_url "$package_url")" -o "${DOWNLOAD_DIR}/${filename}" --progress-bar; then
             print_colored "${RED}" "$(get_string download_failed)"
             exit 1
         fi
@@ -1484,6 +1633,7 @@ show_help() {
     get_string help_no_reboot
     get_string help_headers
     get_string help_signing_fingerprint
+    get_string help_github_mirror
     echo ""
 
     get_string help_examples
@@ -1557,6 +1707,14 @@ parse_args() {
                 fi
                 TRUSTED_GPG_FINGERPRINT="${!i}"
                 ;;
+            --github-mirror)
+                i=$((i + 1))
+                if [ "$i" -gt "$#" ]; then
+                    print_colored "${RED}" "$(get_string missing_option_value) $current_arg"
+                    exit 1
+                fi
+                GITHUB_MIRROR="${!i}"
+                ;;
         esac
 
         i=$((i + 1))
@@ -1569,6 +1727,7 @@ parse_args() {
     if [ "$COMMAND" != "help" ]; then
         validate_kernel_selection
     fi
+    validate_github_mirror
 }
 
 # ==========================================================================
