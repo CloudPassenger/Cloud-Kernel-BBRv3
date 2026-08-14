@@ -17,7 +17,8 @@ trap 'echo "Error on line $LINENO: $BASH_COMMAND"' ERR
 # Global variables
 REPO_URL="https://github.com/CloudPassenger/Cloud-Kernel-BBRv3"
 REPO_API="${REPO_URL/github.com/api.github.com\/repos}"
-DOWNLOAD_DIR="./cloud-kernels"
+DOWNLOAD_DIR=""
+DOWNLOAD_DIR_IS_TEMP=false
 SUPPORTED_SERIES=("6.12" "6.18" "7.1")
 DEFAULT_SERIES="7.1"
 KERNEL_SERIES=""
@@ -290,6 +291,30 @@ run_as_root() {
     else
         sudo "$@"
     fi
+}
+
+# Remove only download directories created by this installer.
+cleanup_download_dir() {
+    if [ "$DOWNLOAD_DIR_IS_TEMP" = true ] && [ -n "$DOWNLOAD_DIR" ]; then
+        rm -rf -- "$DOWNLOAD_DIR"
+    fi
+    DOWNLOAD_DIR=""
+    DOWNLOAD_DIR_IS_TEMP=false
+}
+
+# Create one private, unique directory for every downloaded release asset.
+create_download_dir() {
+    cleanup_download_dir
+    DOWNLOAD_DIR=$(mktemp -d /var/tmp/cloud-kernels.XXXXXX) || return 1
+    DOWNLOAD_DIR_IS_TEMP=true
+}
+
+# Make verified local packages readable by APT's unprivileged _apt user only
+# for the installation window. The temporary directory is removed afterwards.
+install_deb_packages() {
+    chmod 0755 "$DOWNLOAD_DIR" || return 1
+    chmod 0644 "$@" || return 1
+    run_as_root apt-get install -y "$@"
 }
 
 # Update package repository metadata
@@ -819,12 +844,10 @@ fetch_releases() {
 # Download kernel packages
 download_packages() {
     print_header "$(get_string downloading)"
-    DOWNLOAD_DIR="./cloud-kernels/${SELECTED_TAG}/${DISTRO_ID}-${ARCH}"
-
-    # Always start with an empty target-specific directory so stale packages
-    # from an earlier release can never be installed with the selected one.
-    rm -rf "$DOWNLOAD_DIR"
-    mkdir -p "$DOWNLOAD_DIR"
+    if ! create_download_dir; then
+        print_colored "${RED}" "$(get_string download_failed)"
+        exit 1
+    fi
     print_colored "${CYAN}" "$(get_string created_dir) $DOWNLOAD_DIR"
 
     local release_json assets_json
@@ -1334,7 +1357,7 @@ install_packages() {
                 deb_packages+=("${deb_development_packages[@]}")
             fi
             if [ "${#deb_packages[@]}" -eq 0 ] || \
-               ! run_as_root apt-get install -y "${deb_packages[@]}"; then
+               ! install_deb_packages "${deb_packages[@]}"; then
                 print_colored "${RED}" "$(get_string install_failed)"
                 exit 1
             fi
@@ -1418,7 +1441,7 @@ install_packages() {
         print_colored "${YELLOW}" "$(get_string boot_entry_missing) $boot_image"
     fi
 
-    rm -rf "$DOWNLOAD_DIR"
+    cleanup_download_dir
 
     if [ "$AUTO_REBOOT" = false ]; then
         print_colored "${YELLOW}" "$(get_string skip_reboot)"
@@ -1553,6 +1576,7 @@ parse_args() {
 # ==========================================================================
 
 main() {
+    trap cleanup_download_dir EXIT
     parse_args "$@"
 
     if [ "$COMMAND" = "help" ]; then

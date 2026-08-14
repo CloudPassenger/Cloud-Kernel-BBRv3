@@ -427,44 +427,24 @@ jobs:
           - name: Ubuntu 24.04
             image: ubuntu:24.04
     steps:
+      - name: Checkout Installer Source Code
+        uses: actions/checkout@v7
+
       - name: Download Debian Packages
         uses: actions/download-artifact@v8
         with:
           name: release-deb-${{ needs.prepare.outputs.arch }}
           path: packages
 
-      - name: Validate Runtime and Development Package Lifecycle
+      - name: Validate Installer Package Lifecycle
         run: |
           docker run --rm \
-            --volume "$GITHUB_WORKSPACE/packages:/packages:ro" \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
             --env DEBIAN_FRONTEND=noninteractive \
             "${{ matrix.image }}" \
             bash -euxo pipefail -c '
               apt-get update
-              image_deb=$(find /packages -name "linux-image-*.deb" -print -quit)
-              headers_deb=$(find /packages -name "linux-headers-*.deb" -print -quit)
-              libc_deb=$(find /packages -name "linux-libc-dev_*.deb" -print -quit)
-              [ -n "$image_deb" ]
-              [ -n "$headers_deb" ]
-              [ -n "$libc_deb" ]
-
-              apt-get install -y "$image_deb"
-              release=$(dpkg-deb -f "$image_deb" Package)
-              release=${release#linux-image-}
-              [ -f "/boot/vmlinuz-$release" ]
-              [ -s "/boot/initrd.img-$release" ]
-              [ -d "/lib/modules/$release" ]
-              [ ! -e "/lib/modules/$release/build" ]
-              ! dpkg-query -W -f="${db:Status-Abbrev}" "linux-headers-$release" 2>/dev/null | grep -q ^ii
-
-              apt-get install -y "$headers_deb" "$libc_deb"
-              [ -L "/lib/modules/$release/build" ]
-              [ -d "/usr/src/linux-headers-$release" ]
-
-              apt-get purge -y "linux-headers-$release" "linux-image-$release"
-              [ ! -e "/lib/modules/$release" ]
-              [ ! -e "/boot/vmlinuz-$release" ]
-              [ ! -e "/boot/initrd.img-$release" ]
+              /workspace/.github/scripts/test_install_kernel_deb.sh /workspace/packages
             '
 
   build-rpm:
