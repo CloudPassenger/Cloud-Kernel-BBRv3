@@ -134,6 +134,7 @@ Options and commands:
   - `-a, --no-reboot`: Skip reboot after installation
   - `--signing-fingerprint`: Optional trusted full OpenPGP fingerprint; `CLOUD_KERNEL_GPG_FINGERPRINT` is also supported
   - `--github-mirror URL`: Add an HTTPS GitHub mirror proxy to the automatic race; `CLOUD_KERNEL_GITHUB_MIRROR` is also supported
+  - `--auto-mirrors`: Skip direct GitHub access and use the built-in GitHub mirrors immediately
 
 The project's current OpenPGP primary-key fingerprint is:
 

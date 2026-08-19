@@ -133,6 +133,7 @@ export CLOUD_KERNEL_GITHUB_MIRROR="https://<your-trusted-github-proxy>"
   - `-a, --no-reboot`：安装后不自动重启
   - `--signing-fingerprint`：可选；指定可信 OpenPGP 完整指纹，也可设置 `CLOUD_KERNEL_GPG_FINGERPRINT`
   - `--github-mirror URL`：将一个 HTTPS GitHub 镜像代理加入自动测速候选池；也可设置 `CLOUD_KERNEL_GITHUB_MIRROR`
+  - `--auto-mirrors`：跳过直连 GitHub，直接使用 GitHub 镜像源进行下载
 
 项目当前默认的 OpenPGP 主密钥完整指纹为：
 
