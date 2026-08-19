@@ -30,6 +30,7 @@ ACTIVE_GITHUB_MIRROR=""
 MIRROR_PROBE_DIR=""
 DOWNLOAD_DIR=""
 DOWNLOAD_DIR_IS_TEMP=false
+AUTO_MIRRORS=false
 SUPPORTED_SERIES=("6.12" "6.18" "7.1")
 DEFAULT_SERIES="7.1"
 KERNEL_SERIES=""
@@ -157,6 +158,7 @@ STRINGS[en,help_no_reboot]="  -a, --no-reboot   Skip reboot after installation"
 STRINGS[en,help_headers]="      --headers       Also install kernel headers/development files"
 STRINGS[en,help_signing_fingerprint]="      --signing-fingerprint    Optional trusted OpenPGP signing-key fingerprint"
 STRINGS[en,help_github_mirror]="      --github-mirror URL      HTTPS proxy prefix for GitHub URLs (or CLOUD_KERNEL_GITHUB_MIRROR)"
+STRINGS[en,help_auto_mirrors]="      --auto-mirrors           Skip direct GitHub connection, use built-in mirrors only"
 STRINGS[en,help_examples]="Examples:"
 STRINGS[en,help_example1]="  Install the latest kernel from the 6.18 series with English interface:"
 STRINGS[en,help_example2]="  Install a specific kernel version without reboot:"
@@ -251,6 +253,7 @@ STRINGS[zh,help_no_reboot]="  -a, --no-reboot   安装后不重启"
 STRINGS[zh,help_headers]="      --headers       同时安装内核头文件和开发文件"
 STRINGS[zh,help_signing_fingerprint]="      --signing-fingerprint    可选的可信 OpenPGP 签名密钥指纹"
 STRINGS[zh,help_github_mirror]="      --github-mirror URL      GitHub URL 的 HTTPS 镜像代理前缀（或 CLOUD_KERNEL_GITHUB_MIRROR）"
+STRINGS[zh,help_auto_mirrors]="      --auto-mirrors           跳过直接连接 GitHub，仅使用内置镜像源"
 STRINGS[zh,help_examples]="示例："
 STRINGS[zh,help_example1]="  使用英文界面安装 6.18 系列的最新内核："
 STRINGS[zh,help_example2]="  安装特定版本内核且不重启："
@@ -414,9 +417,12 @@ github_api_get() {
     fi
 
     ACTIVE_GITHUB_MIRROR=""
-    if GITHUB_RESPONSE=$(github_curl "$url") && \
-       github_response_matches "$GITHUB_RESPONSE" "$response_filter"; then
-        return 0
+    # Skip direct GitHub connection if AUTO_MIRRORS is enabled
+    if [ "$AUTO_MIRRORS" != true ]; then
+        if GITHUB_RESPONSE=$(github_curl "$url") && \
+           github_response_matches "$GITHUB_RESPONSE" "$response_filter"; then
+            return 0
+        fi
     fi
 
     print_colored "${YELLOW}" "$(get_string github_mirror_fallback)"
@@ -1634,6 +1640,7 @@ show_help() {
     get_string help_headers
     get_string help_signing_fingerprint
     get_string help_github_mirror
+    get_string help_auto_mirrors
     echo ""
 
     get_string help_examples
@@ -1714,6 +1721,9 @@ parse_args() {
                     exit 1
                 fi
                 GITHUB_MIRROR="${!i}"
+                ;;
+            --auto-mirrors)
+                AUTO_MIRRORS=true
                 ;;
         esac
 
