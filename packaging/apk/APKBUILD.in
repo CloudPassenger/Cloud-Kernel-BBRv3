@@ -9,7 +9,7 @@ arch="x86_64 aarch64"
 license="GPL-2.0-only"
 depends="initramfs-generator linux-firmware-any"
 makedepends="$_depends_dev bc binutils bpftool diffutils findutils gawk
-	installkernel linux-headers openssl-dev python3 rsync sed"
+	installkernel jq linux-headers openssl-dev python3 rsync sed"
 options="!strip !check"
 source="compiled-kernel.tar.zst"
 install="$pkgname.post-deinstall"
@@ -59,6 +59,9 @@ package() {
 		INSTALL_MOD_STRIP=1 \
 		DEPMOD=true \
 		modules_install
+	bash .external-modules/check.sh package \
+		"$pkgdir/lib/modules/$release" \
+		.external-modules/manifest.json
 
 	local image_path
 	image_path=$(make -s ARCH="$karch" image_name)

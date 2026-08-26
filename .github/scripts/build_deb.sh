@@ -115,6 +115,9 @@ make ARCH="$kernel_arch" \
   INSTALL_MOD_PATH="$image_root" \
   INSTALL_MOD_STRIP=1 \
   modules_install
+bash "$kernel_dir/.external-modules/check.sh" package \
+  "$image_root/lib/modules/$kernel_release" \
+  "$kernel_dir/.external-modules/manifest.json"
 rm -f \
   "$image_root/lib/modules/$kernel_release/build" \
   "$image_root/lib/modules/$kernel_release/source"

@@ -327,7 +327,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential bc bison flex libelf-dev libssl-dev pkg-config \
+            build-essential bc bison flex jq libelf-dev libssl-dev pkg-config \
             kmod rsync cpio xz-utils dpkg-dev zstd
 
       - name: Checkout Workflow Source Code

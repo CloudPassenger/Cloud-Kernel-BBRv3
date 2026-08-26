@@ -1,0 +1,21 @@
+config AMNEZIAWG
+	tristate "AmneziaWG secure network tunnel"
+	depends on NET && INET
+	depends on IPV6 || !IPV6
+	depends on !KMSAN
+	select NET_UDP_TUNNEL
+	select DST_CACHE
+	select CRYPTO
+	select CRYPTO_LIB_CURVE25519
+	select CRYPTO_LIB_CHACHA20POLY1305
+	select CRYPTO_LIB_UTILS
+	help
+	  AmneziaWG is a WireGuard-derived tunnel protocol with configurable
+	  traffic-obfuscation parameters. The module is named amneziawg.
+
+config AMNEZIAWG_DEBUG
+	bool "AmneziaWG debugging checks and verbose messages"
+	depends on AMNEZIAWG
+	help
+	  Enable additional validation, self-tests, and verbose runtime logging.
+	  Say N unless debugging the module.

@@ -51,8 +51,8 @@ fi
 if command -v dnf >/dev/null 2>&1; then
   dnf -y install \
     bash bc binutils bison cmake diffutils elfutils-devel elfutils-libelf-devel \
-    findutils flex gcc git gzip hostname kmod make openssl openssl-devel patch \
-    perl python3 rpm-build rsync tar xz zlib-devel zstd
+    findutils flex gcc git gzip hostname jq kmod make openssl openssl-devel \
+    patch perl python3 rpm-build rsync tar xz zlib-devel zstd
 else
   printf 'error: dnf is required for RPM builds\n' >&2
   exit 1

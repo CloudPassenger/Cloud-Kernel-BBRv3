@@ -81,7 +81,16 @@ xanmod_fix_dir=$repo_root/xanmod_patch_fixes/$series
 if [ -d "$xanmod_fix_dir" ]; then
   for fix_patch in "$xanmod_fix_dir"/*.patch; do
     [ -e "$fix_patch" ] || continue
-    patch -d "$xanmod_dir" -p1 < "$fix_patch"
+    if patch --dry-run --batch --forward -d "$xanmod_dir" -p1 \
+        < "$fix_patch" >/dev/null; then
+      patch --batch --forward -d "$xanmod_dir" -p1 < "$fix_patch"
+    elif patch --dry-run --batch --reverse -d "$xanmod_dir" -p1 \
+        < "$fix_patch" >/dev/null; then
+      printf 'XanMod fix already present upstream: %s\n' "$(basename "$fix_patch")"
+    else
+      printf 'error: XanMod fix no longer applies: %s\n' "$fix_patch" >&2
+      exit 1
+    fi
   done
 fi
 
@@ -111,12 +120,20 @@ printf 'Applying complete patch series...\n'
   cd "$kernel_dir"
   QUILT_PATCHES=patches quilt push -a
 )
+external_modules_dir=$kernel_dir/.external-modules
+external_modules_manifest=$external_modules_dir/manifest.json
+mkdir -p "$external_modules_dir"
+bash "$repo_root/.github/scripts/external_modules.sh" integrate \
+  "$kernel_dir" "$series"
+bash "$repo_root/.github/scripts/external_modules.sh" manifest \
+  "$series" > "$external_modules_manifest"
 
 printf 'Merging Debian cloud config for %s...\n' "$arch"
 KERNEL_DIR=$kernel_dir \
 DEBIAN_CONFIG_DIR=$debian_dir/debian/config \
   bash "$repo_root/.github/scripts/apply_config.sh" "$series" "$arch"
 make -C "$kernel_dir" ARCH="$kernel_arch" olddefconfig
+bash "$repo_root/.github/scripts/check_external_modules.sh" config "$kernel_dir"
 kernel_release=$(make -s -C "$kernel_dir" ARCH="$kernel_arch" kernelrelease)
 
 kernel_source_sha=$(curl --fail --location --retry 3 --silent \
@@ -131,9 +148,12 @@ series_sha=$(sha256sum "$kernel_dir/patches/series" | cut -d ' ' -f 1)
 # Remove host-built helpers before archiving so each packaging lane rebuilds
 # them against its own libc while preserving the resolved kernel config.
 prepared_config=$work_dir/prepared.config
+external_modules_state=$work_dir/external-modules
 cp "$kernel_dir/.config" "$prepared_config"
+mv "$external_modules_dir" "$external_modules_state"
 make -C "$kernel_dir" ARCH="$kernel_arch" mrproper
 mv "$prepared_config" "$kernel_dir/.config"
+mv "$external_modules_state" "$external_modules_dir"
 
 jq -n \
   --arg kernel_version "$kernel_version" \
@@ -146,6 +166,7 @@ jq -n \
   --arg xanmod_commit "$xanmod_commit" \
   --arg patch_series_sha256 "$series_sha" \
   --arg config_sha256 "$config_sha" \
+  --slurpfile external_modules "$external_modules_manifest" \
   '{
     kernel_version: $kernel_version,
     kernel_release: $kernel_release,
@@ -156,7 +177,8 @@ jq -n \
     debian_commit: $debian_commit,
     xanmod_commit: $xanmod_commit,
     patch_series_sha256: $patch_series_sha256,
-    config_sha256: $config_sha256
+    config_sha256: $config_sha256,
+    external_modules: $external_modules[0]
   }' > "$work_dir/build-manifest.json"
 
 printf 'Prepared Linux %s for %s in %s\n' "$kernel_version" "$arch" "$kernel_dir"

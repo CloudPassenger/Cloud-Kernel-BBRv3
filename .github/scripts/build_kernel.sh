@@ -95,6 +95,7 @@ make -C "$kernel_dir" \
   CC="ccache gcc" \
   HOSTCC="ccache gcc" \
   olddefconfig
+bash "$repo_root/.github/scripts/check_external_modules.sh" config "$kernel_dir"
 
 actual_release=$(make -s -C "$kernel_dir" ARCH="$kernel_arch" kernelrelease)
 case "$actual_release" in
@@ -112,6 +113,8 @@ make -C "$kernel_dir" -j"$(nproc)" --output-sync=target \
   HOSTCC="ccache gcc" \
   KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-cloudpassenger}" \
   KBUILD_BUILD_HOST="${KBUILD_BUILD_HOST:-cloud-kernel-bbrv3}"
+bash "$repo_root/.github/scripts/check_external_modules.sh" \
+  build "$kernel_dir" "$actual_release"
 
 # De-hostify: drop every host-compiled ELF program under scripts/ and tools/.
 # Each packaging lane rebuilds these (cheaply, via `make modules_prepare`)

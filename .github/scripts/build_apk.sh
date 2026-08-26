@@ -65,9 +65,8 @@ fi
 apk add \
   alpine-sdk argp-standalone bash bc binutils bison bpftool cmake \
   diffutils doas elfutils-dev findutils flex gawk git gmp-dev installkernel \
-  linux-headers mkinitfs mpc1-dev mpfr-dev musl-obstack-dev openssl-dev perl \
-  pkgconf python3 rsync sed tar xz zlib-dev \
-  zstd
+  jq linux-headers mkinitfs mpc1-dev mpfr-dev musl-obstack-dev openssl-dev \
+  perl pkgconf python3 rsync sed tar xz zlib-dev zstd
 
 actual_carch=$(apk --print-arch)
 if [ "$actual_carch" != "$expected_carch" ]; then
