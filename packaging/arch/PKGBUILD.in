@@ -16,6 +16,7 @@ makedepends=(
   bison
   flex
   gcc
+  jq
   libelf
   make
   openssl
@@ -97,6 +98,9 @@ _package() {
     INSTALL_MOD_STRIP=1 \
     DEPMOD=/doesnt/exist \
     modules_install
+  bash .external-modules/check.sh package \
+    "$modulesdir" \
+    .external-modules/manifest.json
 
   rm -f "$modulesdir/build" "$modulesdir/source"
 }

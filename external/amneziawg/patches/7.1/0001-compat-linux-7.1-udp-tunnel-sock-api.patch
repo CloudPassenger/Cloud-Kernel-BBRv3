@@ -1,0 +1,60 @@
+From: Cloud Kernel BBRv3 Maintainers <noreply@cloud-kernel-bbrv3.invalid>
+Subject: [PATCH] compat: handle UDP tunnel sock API from Linux 7.1
+
+Linux 7.1 changed setup_udp_tunnel_sock() and
+udp_tunnel_sock_release() to accept struct sock instead of struct socket.
+Keep the old calls for earlier kernels and pass socket->sk on 7.1+.
+
+---
+ socket.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+--- a/socket.c
++++ b/socket.c
+@@ -375,7 +375,11 @@ static void sock_free(struct sock *sock)
+ 	if (unlikely(!sock))
+ 		return;
+ 	sk_clear_memalloc(sock);
++#if COMPAT_VERSION > 7 || (COMPAT_VERSION == 7 && COMPAT_PATCHLEVEL >= 1)
++	udp_tunnel_sock_release(sock);
++#else
+ 	udp_tunnel_sock_release(sock->sk_socket);
++#endif
+ }
+ 
+ static void set_sock_opts(struct socket *sock)
+@@ -429,14 +433,22 @@ retry:
+ 		goto out;
+ 	}
+ 	set_sock_opts(new4);
++#if COMPAT_VERSION > 7 || (COMPAT_VERSION == 7 && COMPAT_PATCHLEVEL >= 1)
++	setup_udp_tunnel_sock(net, new4->sk, &cfg);
++#else
+ 	setup_udp_tunnel_sock(net, new4, &cfg);
++#endif
+ 
+ #if IS_ENABLED(CONFIG_IPV6)
+ 	if (ipv6_mod_enabled()) {
+ 		port6.local_udp_port = inet_sk(new4->sk)->inet_sport;
+ 		ret = udp_sock_create(net, &port6, &new6);
+ 		if (ret < 0) {
++#if COMPAT_VERSION > 7 || (COMPAT_VERSION == 7 && COMPAT_PATCHLEVEL >= 1)
++			udp_tunnel_sock_release(new4->sk);
++#else
+ 			udp_tunnel_sock_release(new4);
++#endif
+ 			if (ret == -EADDRINUSE && !port && retries++ < 100)
+ 				goto retry;
+ 			pr_err("%s: Could not create IPv6 socket\n",
+@@ -444,7 +456,11 @@ retry:
+ 			goto out;
+ 		}
+ 		set_sock_opts(new6);
++#if COMPAT_VERSION > 7 || (COMPAT_VERSION == 7 && COMPAT_PATCHLEVEL >= 1)
++		setup_udp_tunnel_sock(net, new6->sk, &cfg);
++#else
+ 		setup_udp_tunnel_sock(net, new6, &cfg);
++#endif
+ 	}
+ #endif
+ 

@@ -19,6 +19,7 @@ BuildRequires:  bison
 BuildRequires:  elfutils-libelf-devel
 BuildRequires:  flex
 BuildRequires:  gcc
+BuildRequires:  jq
 BuildRequires:  make
 BuildRequires:  openssl
 BuildRequires:  openssl-devel
@@ -82,6 +83,9 @@ make ARCH=%{kernel_arch} \
   INSTALL_MOD_STRIP=1 \
   DEPMOD=true \
   modules_install
+bash .external-modules/check.sh package \
+  "%{buildroot}/lib/modules/%{kernel_release}" \
+  .external-modules/manifest.json
 
 image_path=$(make -s ARCH=%{kernel_arch} image_name)
 install -Dm644 "$image_path" \

@@ -64,6 +64,7 @@ This repository builds every package format from the same patched, fully configu
   - **BBRv1**: the original algorithm remains available as `bbr1`
   - **BBRPlus**: the dog250 and cx9208 variant, adapted from [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable)
 - Includes **TCP Brutal** for multiplexed workloads, sourced from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal)
+- Integrates the [**AmneziaWG** kernel module](external/amneziawg/README_en.md) into the shared kernel build and packages; compatible `awg` / `awg-quick` userspace tools must be installed separately for configuration
 - Uses the upstream **EEVDF** fair scheduler without third-party scheduler patches
 - Builds for x86_64 and arm64, with daily upstream update checks
 - Publishes distribution-native packages for Debian/Ubuntu, the Fedora/RHEL ecosystem, Alpine Linux, and Arch Linux, with major installation paths validated in containers
@@ -73,7 +74,7 @@ This repository builds every package format from the same patched, fully configu
 | Component | Details |
 | --- | --- |
 | Kernel base | 6.12 / 6.18 / 7.1 series with Debian kernel team patches |
-| Networking | BBRv3 built in and enabled by default; BBRPlus, BBRv1, and Brutal as modules; `sch_fq` as the default qdisc |
+| Networking | BBRv3 built in and enabled by default; BBRPlus, BBRv1, and Brutal as modules; AmneziaWG as a kernel module; `sch_fq` as the default qdisc |
 | CPU scheduler | Upstream EEVDF fair scheduler |
 | Memory policy | THP in `madvise` mode; autogroup and automatic NUMA balancing disabled |
 | CPU capacity (x86) | `NR_CPUS=512`, with `MAXSMP` disabled for VPS-scale systems |

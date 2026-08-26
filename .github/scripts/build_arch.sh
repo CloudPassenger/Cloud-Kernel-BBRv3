@@ -52,7 +52,7 @@ if ! command -v pacman >/dev/null 2>&1; then
 fi
 
 pacman -Syu --noconfirm --needed \
-  base-devel bc bison cmake flex git kmod libelf mkinitcpio openssl \
+  base-devel bc bison cmake flex git jq kmod libelf mkinitcpio openssl \
   python rsync xxhash zstd
 
 localversion=$(tar --zstd -xOf "$compiled_archive" linux/.config \
