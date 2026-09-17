@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml)
 [![Upstream Check](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml)
-[![License](https://img.shields.io/badge/license-Unlicense-blue.svg)](https://unlicense.org/)
+[![License](https://img.shields.io/badge/license-mixed-blue.svg)](LICENSE)
 
 ![Kernel Series](https://img.shields.io/badge/kernel-6.12%20%7C%206.18%20%7C%207.1-blue)
 ![BBRv3](https://img.shields.io/badge/BBR-v3-brightgreen)
@@ -240,4 +240,4 @@ OpenPGP 主密钥应离线保管，仅向 CI 导出可撤销、可过期的签�
 
 ## 📜 许可证
 
-本项目采用 [Unlicense](https://unlicense.org/) 许可证。
+本仓库包含多种许可证范围。项目拥有权利的原创软件和文档采用 [Unlicense](LICENSES/Unlicense.txt)，项目原创图片 `Cloudy Kernel.png` 采用 [CC0-1.0](LICENSES/CC0-1.0.txt)；Linux 内核、补丁、导入模块及其他第三方内容继续适用各自的上游许可证。完整范围与来源见 [LICENSE](LICENSE)、[NOTICE](NOTICE) 和 [`LICENSES/`](LICENSES/)。

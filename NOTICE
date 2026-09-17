@@ -1,0 +1,102 @@
+Cloud-Kernel-BBRv3 component and attribution notice
+
+This notice describes the principal components currently distributed by this
+repository and its release workflow. It supplements, and does not replace,
+license and copyright notices in individual source files or upstream trees.
+No entry below relicenses third-party material.
+
+Project-authored integration material
+-------------------------------------
+Paths: `.github/`, `custom_configs/`, `packaging/`, `install-kernel.sh`, the
+repository documentation, and integration glue under `external/`, except for
+files carrying their own notice or copied from an upstream project.
+License: Unlicense (`LICENSES/Unlicense.txt`).
+Source: https://github.com/CloudPassenger/Cloud-Kernel-BBRv3
+
+Project artwork
+---------------
+Path: `Cloudy Kernel.png`.
+License: CC0-1.0 (`LICENSES/CC0-1.0.txt`).
+The project owner has identified this image as project-owned artwork and has
+applied CC0 1.0 Universal to it.
+
+Linux kernel
+------------
+Generated path: the prepared `linux/` source tree and packaged kernel binaries.
+Source: https://www.kernel.org/
+License: GPL-2.0-only for the kernel as a whole; individual files may carry
+other GPL-2.0-compatible SPDX expressions. The prepared source tree preserves
+Linux's `COPYING` file and `LICENSES/` hierarchy. A reference GPLv2 text is
+also provided as `LICENSES/GPL-2.0-only.txt`.
+
+Debian kernel patch set
+-----------------------
+Generated paths: `linux/patches/` and the applied changes in `linux/`.
+Source: https://salsa.debian.org/kernel-team/linux.git
+Revision: the `debian/<kernel-version>-1` tag and resolved commit recorded in
+each release's `build-manifest.json`.
+License and copyright: retained from Debian's patch headers, source files, and
+`debian/copyright`; the exact terms vary by file and remain those of the
+respective copyright holders.
+
+XanMod network patches and BBRv3
+--------------------------------
+Generated paths: `linux/patches/net/` and their applied changes in `linux/`.
+Source: https://gitlab.com/xanmod/linux-patches.git
+Revision: the resolved commit recorded in each release's
+`build-manifest.json`; Linux 6.18 releases earlier than 6.18.33 use the pinned
+commit `0bc9e62789c65ae9b2cf8910773f892a51d9e896`.
+License: GPL-2.0-compatible terms retained from upstream patch and source
+headers. The BBRv3 source carries `GPL-2.0 OR BSD-3-Clause`; reference texts
+are `LICENSES/GPL-2.0-only.txt` and `LICENSES/BSD-3-Clause.txt`.
+Local modification: `xanmod_patch_fixes/7.1/0001-fix-tcp_bbr-spdx-header.patch`
+restores the upstream BBR SPDX expression when required.
+
+Google BBR1 copy
+----------------
+Paths: `kernel_patches/*/net/0000-net-tcp-bbr1-copy.patch`; generated
+`linux/net/ipv4/tcp_bbr1.c` and related applied changes.
+Source commit: `f17f8f1e84b4d21af38354a6f403b63582bb645b` by Neal Cardwell and
+Google contributors.
+License: distributed conservatively under GPL-2.0-only as Linux-derived code.
+The module's `MODULE_LICENSE("Dual BSD/GPL")` marker is preserved but is not
+used here as a substitute for a source-license grant.
+
+BBRPlus
+-------
+Paths: `kernel_patches/*/net/0001-net-tcp-bbrplus-copy.patch`; generated
+`linux/net/ipv4/tcp_bbrplus.c` and related applied changes.
+Provenance: Linux BBR-derived code with changes attributed to dog250 and
+cx9208, subsequently ported to Linux 6.x by UJX6N and integrated here by
+Cloud-Kernel-BBRv3.
+Original publication:
+https://blog.csdn.net/dog250/article/details/80629551
+Original packaging/reference repository:
+https://github.com/cx9208/bbrplus
+Linux 6.x port: https://github.com/UJX6N/bbrplus-6.x_stable at commit
+`a4edf963a20915948f1e92f15eada488e0030e4a`.
+License: distributed conservatively under GPL-2.0-only as Linux-derived code.
+The module's `MODULE_LICENSE("Dual BSD/GPL")` marker is preserved but is not
+used here as a substitute for a source-license grant.
+
+AmneziaWG
+---------
+Repository integration paths: `external/amneziawg/`.
+Generated path: `linux/drivers/net/amneziawg/`.
+Source: https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git
+Tag: `v3.1.20260812`.
+Commit: `46803204e7ec3b068199cd671143bec661d3fe21`.
+License: GPL-2.0-compatible terms identified by upstream SPDX headers and the
+upstream `COPYING` file, both preserved in the imported source. Local kernel
+compatibility patches remain under the same GPL-2.0-compatible terms.
+
+Release source and package notices
+----------------------------------
+Each release publishes `linux-<version>-<architecture>-source.tar.zst` beside
+the binary packages. The source archive contains the exact prepared source
+used for the build. It embeds this `LICENSE`, `NOTICE`, and `LICENSES/` bundle,
+plus the resolved Debian and XanMod upstream notices, under
+`linux/Documentation/cloud-kernel-bbrv3/`. Release hashes and signatures cover
+the source archive. Binary and development packages install the project notice
+and reference license bundle in their platform's conventional documentation or
+license directory.

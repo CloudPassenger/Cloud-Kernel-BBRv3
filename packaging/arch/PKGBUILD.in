@@ -34,14 +34,36 @@ source=(
   compiled-kernel.tar.zst
   linux-cloud-bbrv3.preset
   mkinitcpio-linux-cloud-bbrv3.conf
+  LICENSE
+  NOTICE
+  Unlicense.txt
+  GPL-2.0-only.txt
+  BSD-3-Clause.txt
+  CC0-1.0.txt
 )
 sha256sums=(
   '@SOURCE_SHA256@'
   'SKIP'
   'SKIP'
+  'SKIP'
+  'SKIP'
+  'SKIP'
+  'SKIP'
+  'SKIP'
+  'SKIP'
 )
 _kernel_release=@KERNEL_RELEASE@
 _make_verbosity=@MAKE_VERBOSITY@
+
+_install_license_bundle() {
+  local license_dir=$1
+  install -Dm644 "$srcdir/LICENSE" "$license_dir/LICENSE"
+  install -Dm644 "$srcdir/NOTICE" "$license_dir/NOTICE"
+  local license
+  for license in Unlicense.txt GPL-2.0-only.txt BSD-3-Clause.txt CC0-1.0.txt; do
+    install -Dm644 "$srcdir/$license" "$license_dir/LICENSES/$license"
+  done
+}
 
 prepare() {
   cd linux
@@ -103,6 +125,7 @@ _package() {
     .external-modules/manifest.json
 
   rm -f "$modulesdir/build" "$modulesdir/source"
+  _install_license_bundle "$pkgdir/usr/share/licenses/$pkgbase"
 }
 
 _package-headers() {
@@ -146,6 +169,7 @@ _package-headers() {
   mkdir -p "$pkgdir/usr/src"
   ln -s "../lib/modules/$_kernel_release/build" \
     "$pkgdir/usr/src/$pkgbase"
+  _install_license_bundle "$pkgdir/usr/share/licenses/$pkgbase-headers"
 }
 
 package_linux-cloud-bbrv3() {

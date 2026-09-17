@@ -90,6 +90,7 @@ rpmbuild -bb "$repo_root/packaging/rpm/kernel-cloud-bbrv3.spec" \
   --define "kernel_version $kernel_version" \
   --define "kernel_release $actual_release" \
   --define "kernel_source_dir $kernel_dir" \
+  --define "license_source_dir $repo_root" \
   --define "kernel_arch $kernel_arch" \
   --define "kernel_make_verbosity $kernel_make_verbosity" \
   > "$build_log" 2>&1

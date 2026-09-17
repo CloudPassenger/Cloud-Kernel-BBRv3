@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml)
 [![Upstream Check](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml)
-[![License](https://img.shields.io/badge/license-Unlicense-blue.svg)](https://unlicense.org/)
+[![License](https://img.shields.io/badge/license-mixed-blue.svg)](LICENSE)
 
 ![Kernel Series](https://img.shields.io/badge/kernel-6.12%20%7C%206.18%20%7C%207.1-blue)
 ![BBRv3](https://img.shields.io/badge/BBR-v3-brightgreen)
@@ -241,4 +241,4 @@ This project provides kernel build artifacts as-is, without warranty. You are re
 
 ## 📜 License
 
-This project is licensed under the [Unlicense](https://unlicense.org/).
+This repository has multiple license scopes. Project-authored software and documentation are available under the [Unlicense](LICENSES/Unlicense.txt), and the project-owned `Cloudy Kernel.png` artwork is available under [CC0-1.0](LICENSES/CC0-1.0.txt). The Linux kernel, patches, imported modules, and other third-party material remain under their respective upstream licenses. See [LICENSE](LICENSE), [NOTICE](NOTICE), and [`LICENSES/`](LICENSES/) for the complete scope and provenance.

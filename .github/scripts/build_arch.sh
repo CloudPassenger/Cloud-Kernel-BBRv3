@@ -64,6 +64,8 @@ source_sha256=${source_sha256%% *}
 rm -rf "$work_dir"
 mkdir -p "$package_dir" "$package_output" "$output_dir"
 cp "$compiled_archive" "$package_dir/compiled-kernel.tar.zst"
+cp "$repo_root/LICENSE" "$repo_root/NOTICE" "$package_dir/"
+cp "$repo_root"/LICENSES/*.txt "$package_dir/"
 sed \
   -e "s/@KERNEL_VERSION@/$kernel_version/g" \
   -e "s/@KERNEL_RELEASE@/$kernel_release/g" \

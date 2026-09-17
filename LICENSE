@@ -1,24 +1,41 @@
-This is free and unencumbered software released into the public domain.
+Cloud-Kernel-BBRv3 licensing index
 
-Anyone is free to copy, modify, publish, use, compile, sell, or
-distribute this software, either in source code form or as a compiled
-binary, for any purpose, commercial or non-commercial, and by any
-means.
+This repository contains project-authored material together with Linux-derived
+and other third-party material. No single license applies to every file, and
+this index does not relicense any third-party work.
 
-In jurisdictions that recognize copyright laws, the author or authors
-of this software dedicate any and all copyright interest in the
-software to the public domain. We make this dedication for the benefit
-of the public at large and to the detriment of our heirs and
-successors. We intend this dedication to be an overt act of
-relinquishment in perpetuity of all present and future rights to this
-software under copyright law.
+1. Project-authored software and documentation
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
-OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
-ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-OTHER DEALINGS IN THE SOFTWARE.
+Original Cloud-Kernel-BBRv3 automation, configuration fragments, packaging
+integration, and documentation are dedicated under the Unlicense where the
+project controls the relevant rights and where a file does not state another
+license. The complete text is in:
 
-For more information, please refer to <https://unlicense.org>
+    LICENSES/Unlicense.txt
+
+This grant does not apply to the Linux kernel, Debian or XanMod patches, BBR
+implementations, AmneziaWG, imported source, generated source trees, or other
+third-party and derived material.
+
+2. Project artwork
+
+The project-owned artwork `Cloudy Kernel.png` is made available under Creative
+Commons CC0 1.0 Universal. The complete legal text is in:
+
+    LICENSES/CC0-1.0.txt
+
+3. Linux-derived and third-party material
+
+The built Linux kernel is distributed under GPL-2.0-only as a whole, while
+individual files may use GPL-2.0-compatible licenses identified by their own
+SPDX tags and notices. Imported modules, patch collections, and other
+third-party material remain under their respective upstream terms. Included
+reference license texts are in `LICENSES/`; exact component provenance and
+scope are recorded in `NOTICE`.
+
+Package-level `GPL-2.0-only` metadata describes the distributed Linux kernel
+package. It does not replace or override compatible per-file licenses.
+
+See `NOTICE` before redistributing source or binaries. The prepared source
+archive published with each release preserves the applied source, upstream
+license material, build provenance, and this project license bundle.

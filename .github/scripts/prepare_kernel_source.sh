@@ -154,7 +154,18 @@ mv "$external_modules_dir" "$external_modules_state"
 make -C "$kernel_dir" ARCH="$kernel_arch" mrproper
 mv "$prepared_config" "$kernel_dir/.config"
 mv "$external_modules_state" "$external_modules_dir"
+license_bundle_dir=$kernel_dir/Documentation/cloud-kernel-bbrv3
+mkdir -p "$license_bundle_dir"
+cp "$repo_root/LICENSE" "$repo_root/NOTICE" "$license_bundle_dir/"
+cp -R "$repo_root/LICENSES" "$license_bundle_dir/"
+upstream_notice_dir=$license_bundle_dir/upstream
+install -Dm644 "$debian_dir/debian/copyright" \
+  "$upstream_notice_dir/debian-copyright"
+install -Dm644 "$xanmod_dir/LICENSE" \
+  "$upstream_notice_dir/xanmod-LICENSE"
 
+printf 'Copied project and upstream license notices to %s\n' \
+  "$license_bundle_dir"
 jq -n \
   --arg kernel_version "$kernel_version" \
   --arg kernel_release "$kernel_release" \

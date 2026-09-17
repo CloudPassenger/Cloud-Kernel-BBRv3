@@ -81,6 +81,8 @@ kernel_release=$kernel_version$localversion
 rm -rf "$work_dir"
 mkdir -p "$package_dir" "$output_dir"
 cp "$compiled_archive" "$package_dir/compiled-kernel.tar.zst"
+cp "$repo_root/LICENSE" "$repo_root/NOTICE" "$package_dir/"
+cp "$repo_root"/LICENSES/*.txt "$package_dir/"
 sed \
   -e "s/@KERNEL_VERSION@/$kernel_version/g" \
   -e "s/@MAKE_VERBOSITY@/$kernel_make_verbosity/g" \

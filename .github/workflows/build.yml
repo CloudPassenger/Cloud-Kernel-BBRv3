@@ -1019,7 +1019,7 @@ jobs:
             - **Validated targets:** Fedora 43/44, Enterprise Linux 9/10, Alpine Linux 3.21/3.22/3.23/3.24, and Arch Linux x86_64
             - **OpenPGP signing fingerprint:** `${{ vars.PACKAGE_SIGNING_GPG_FINGERPRINT }}`
             - **Signature files:** native RPM signatures, Arch package `.sig` files, `SHA256SUMS`, `SHA256SUMS.asc`, and `cloud-kernel-signing.asc`
-            - **Corresponding source:** `linux-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.debian_arch }}-source.tar.zst` (covered by `SHA256SUMS.asc`)
+            - **Corresponding source:** `linux-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.debian_arch }}-source.tar.zst` (covered by `SHA256SUMS.asc`); it includes the project license/notice bundle and resolved Debian/XanMod notices under `linux/Documentation/cloud-kernel-bbrv3/`.
             - **Applied patches:**
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
@@ -1059,7 +1059,7 @@ jobs:
             - **验证目标：** Fedora 43/44、Enterprise Linux 9/10、Alpine Linux 3.21/3.22/3.23/3.24，以及 Arch Linux x86_64
             - **OpenPGP 签名指纹：** `${{ vars.PACKAGE_SIGNING_GPG_FINGERPRINT }}`
             - **签名文件：** RPM 原生签名、Arch 软件包 `.sig`、`SHA256SUMS`、`SHA256SUMS.asc` 和 `cloud-kernel-signing.asc`
-            - **对应源代码：** `linux-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.debian_arch }}-source.tar.zst`（由 `SHA256SUMS.asc` 覆盖签名）
+            - **对应源代码：** `linux-${{ needs.prepare.outputs.kernel_version }}-${{ needs.prepare.outputs.debian_arch }}-source.tar.zst`（由 `SHA256SUMS.asc` 覆盖签名）；其中包含位于 `linux/Documentation/cloud-kernel-bbrv3/` 的项目许可证/通知文件集合及已解析的 Debian/XanMod 通知。
             - **应用补丁：**
               - `Debian 补丁集合`（来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/)）
               - `BBR V3`（来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches)）

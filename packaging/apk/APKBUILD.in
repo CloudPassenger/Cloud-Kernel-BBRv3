@@ -11,7 +11,13 @@ depends="initramfs-generator linux-firmware-any"
 makedepends="$_depends_dev bc binutils bpftool diffutils findutils gawk
 	installkernel jq linux-headers openssl-dev python3 rsync sed"
 options="!strip !check"
-source="compiled-kernel.tar.zst"
+source="compiled-kernel.tar.zst
+	LICENSE
+	NOTICE
+	Unlicense.txt
+	GPL-2.0-only.txt
+	BSD-3-Clause.txt
+	CC0-1.0.txt"
 install="$pkgname.post-deinstall"
 subpackages="$pkgname-dev:_dev:$CBUILD_ARCH"
 builddir="$srcdir/linux"
@@ -24,6 +30,15 @@ _kernelarch() {
 	esac
 }
 
+_install_license_bundle() {
+	local license_dir=$1
+	install -Dm644 "$srcdir/LICENSE" "$license_dir/LICENSE"
+	install -Dm644 "$srcdir/NOTICE" "$license_dir/NOTICE"
+	local license
+	for license in Unlicense.txt GPL-2.0-only.txt BSD-3-Clause.txt CC0-1.0.txt; do
+		install -Dm644 "$srcdir/$license" "$license_dir/LICENSES/$license"
+	done
+}
 build() {
 	local karch="$(_kernelarch "$CARCH")"
 	cd "$builddir"
@@ -84,6 +99,7 @@ package() {
 	printf '%s\n' '-cloud-bbrv3' > "$pkgdir/lib/modules/$release/kernel-suffix"
 	ln -sf /boot/vmlinuz-cloud-bbrv3 \
 		"$pkgdir/lib/modules/$release/vmlinuz"
+	_install_license_bundle "$pkgdir/usr/share/licenses/$pkgname"
 }
 
 _dev() {
@@ -107,4 +123,5 @@ _dev() {
 	if [ -f certs/signing_key.x509 ]; then
 		install -Dm644 certs/signing_key.x509 "$dir/certs/signing_key.x509"
 	fi
+	_install_license_bundle "$subpkgdir/usr/share/licenses/$subpkgname"
 }

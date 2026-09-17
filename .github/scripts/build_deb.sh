@@ -98,6 +98,17 @@ render_control() {
     "$1"
 }
 
+install_license_bundle() {
+  local package_root=$1
+  local binary_package=$2
+  local doc_dir="$package_root/usr/share/doc/$binary_package"
+
+  install -Dm644 "$repo_root/LICENSE" "$doc_dir/copyright"
+  install -Dm644 "$repo_root/NOTICE" "$doc_dir/NOTICE"
+  install -d "$doc_dir/LICENSES"
+  install -m644 "$repo_root"/LICENSES/*.txt "$doc_dir/LICENSES/"
+}
+
 # --- linux-image-<release> --------------------------------------------------
 image_root=$work_dir/pkg/linux-image
 rm -rf "$image_root"
@@ -136,6 +147,7 @@ for hook in postinst postrm preinst prerm; do
     "$repo_root/packaging/deb/kernel-hook.in" > "$image_root/DEBIAN/$hook"
   chmod 755 "$image_root/DEBIAN/$hook"
 done
+install_license_bundle "$image_root" "linux-image-$kernel_release"
 
 dpkg-deb --root-owner-group -Zgzip --build "$image_root" \
   "$output_dir/linux-image-${kernel_release}_${packageversion}_${debarch}.deb"
@@ -155,6 +167,7 @@ ln -sf "/usr/src/linux-headers-$kernel_release" \
   "$headers_root/lib/modules/$kernel_release/build"
 
 render_control "$repo_root/packaging/deb/control-headers.in" > "$headers_root/DEBIAN/control"
+install_license_bundle "$headers_root" "linux-headers-$kernel_release"
 
 dpkg-deb --root-owner-group -Zgzip --build "$headers_root" \
   "$output_dir/linux-headers-${kernel_release}_${packageversion}_${debarch}.deb"
@@ -174,6 +187,7 @@ mkdir -p "$libc_root/usr/include/$multiarch"
 mv "$libc_root/usr/include/asm" "$libc_root/usr/include/$multiarch/asm"
 
 render_control "$repo_root/packaging/deb/control-libc-dev.in" > "$libc_root/DEBIAN/control"
+install_license_bundle "$libc_root" "linux-libc-dev"
 
 dpkg-deb --root-owner-group -Zgzip --build "$libc_root" \
   "$output_dir/linux-libc-dev_${packageversion}_${debarch}.deb"

@@ -1,6 +1,7 @@
 %{!?kernel_version:%global kernel_version 0}
 %{!?kernel_release:%global kernel_release %{kernel_version}}
 %{!?kernel_source_dir:%global kernel_source_dir %{_builddir}/linux}
+%{!?license_source_dir:%global license_source_dir %{_sourcedir}}
 %{!?kernel_arch:%global kernel_arch x86}
 %{!?kernel_make_verbosity:%global kernel_make_verbosity 0}
 %global debug_package %{nil}
@@ -87,6 +88,18 @@ bash .external-modules/check.sh package \
   "%{buildroot}/lib/modules/%{kernel_release}" \
   .external-modules/manifest.json
 
+license_dir=%{buildroot}/usr/share/licenses/kernel-cloud-bbrv3
+devel_license_dir=%{buildroot}/usr/share/licenses/kernel-cloud-bbrv3-devel
+for license_dir in "$license_dir" "$devel_license_dir"; do
+  install -d "$license_dir/LICENSES"
+  install -m 0644 \
+    "%{license_source_dir}/LICENSE" \
+    "%{license_source_dir}/NOTICE" \
+    "$license_dir/"
+  install -m 0644 "%{license_source_dir}"/LICENSES/*.txt \
+    "$license_dir/LICENSES/"
+done
+
 image_path=$(make -s ARCH=%{kernel_arch} image_name)
 install -Dm644 "$image_path" \
   %{buildroot}/lib/modules/%{kernel_release}/vmlinuz
@@ -156,8 +169,10 @@ fi
 
 %files -f %{buildroot}/kernel-cloud-bbrv3.list
 %exclude /kernel-cloud-bbrv3.list
+%license /usr/share/licenses/kernel-cloud-bbrv3
 
 %files devel
+%license /usr/share/licenses/kernel-cloud-bbrv3-devel
 /usr/src/kernels/%{kernel_release}
 /lib/modules/%{kernel_release}/build
 
