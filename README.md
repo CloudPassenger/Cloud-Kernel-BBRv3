@@ -154,7 +154,7 @@ AFD6BDBFEBB9105077C4CA41399953F30E337E5E
 
 ### 预构建软件包
 
-x86_64 Release 提供 DEB、RPM、APK 和 Arch Linux 软件包，arm64 Release 提供 DEB、RPM 和 APK。RPM 包适用于 Fedora、RHEL、Rocky Linux、AlmaLinux、CentOS Stream 与 Oracle Linux；APK 包适用于 Alpine Linux；Arch Linux 包使用官方 `archlinux:base-devel` 环境构建。RPM 使用 OpenPGP 原生签名，APK 使用固定的 Alpine RSA 密钥签名，Arch Linux 软件包使用同一 OpenPGP 发布密钥生成独立的 `.sig` 签名，所有 Release 产物均附有 `SHA256SUMS.asc` 校验清单。安装脚本在调用包管理器前会验证签名和校验和。
+x86_64 Release 提供 DEB、RPM、APK 和 Arch Linux 软件包，arm64 Release 提供 DEB、RPM 和 APK。每个 Release 同时提供本次构建所使用的 `linux-<版本>-<架构>-source.tar.zst` 准备完成的内核源码包。RPM 包适用于 Fedora、RHEL、Rocky Linux、AlmaLinux、CentOS Stream 与 Oracle Linux；APK 包适用于 Alpine Linux；Arch Linux 包使用官方 `archlinux:base-devel` 环境构建。RPM 使用 OpenPGP 原生签名，APK 使用固定的 Alpine RSA 密钥签名，Arch Linux 软件包使用同一 OpenPGP 发布密钥生成独立的 `.sig` 签名，包括源码包在内的所有 Release 产物均由 `SHA256SUMS.asc` 签名校验清单覆盖。安装脚本在调用包管理器前会验证签名和校验和。
 
 从 [发布页面](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/releases) 下载当前架构的软件包后安装：
 
