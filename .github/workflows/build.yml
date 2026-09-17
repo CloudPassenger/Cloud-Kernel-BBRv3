@@ -1024,7 +1024,6 @@ jobs:
               - `Debian Patches Collection` (from [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/))
               - `BBR V3` (from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches))
               - `BBRPlus` (modified from [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable))
-              - `TCP Brutal` (from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal))
 
             **Important:** Secure Boot is not currently supported. Keep the distribution kernel installed as a recovery option. This VPS configuration disables USB/HID, so Arch Linux `mkinitcpio` may warn that `usbhid` is missing; do not use this kernel where boot-time USB keyboard input is required.
 
@@ -1065,7 +1064,6 @@ jobs:
               - `Debian 补丁集合`（来自 [kernel-team/linux](https://salsa.debian.org/kernel-team/linux/)）
               - `BBR V3`（来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches)）
               - `BBRPlus`（修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable)）
-              - `TCP Brutal`（来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal)）
 
             **重要提示：** 当前不支持 Secure Boot。请保留发行版原有内核作为恢复选项。本 VPS 配置禁用了 USB/HID，因此 Arch Linux `mkinitcpio` 可能提示缺少 `usbhid`；需要在启动阶段使用 USB 键盘输入的机器不应使用此内核。
 

@@ -4,7 +4,7 @@
 
 # Cloud Kernel BBRv3
 
-**A Debian custom kernel with BBRv3 / BBRPlus / Brutal, based on Debian Cloud kernel configuration, optimized for VPS stable operation**
+**A Debian custom kernel with BBRv3 / BBRPlus, based on Debian Cloud kernel configuration, optimized for VPS stable operation**
 
 [![CI](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml)
 [![Upstream Check](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml)
@@ -13,7 +13,6 @@
 ![Kernel Series](https://img.shields.io/badge/kernel-6.12%20%7C%206.18%20%7C%207.1-blue)
 ![BBRv3](https://img.shields.io/badge/BBR-v3-brightgreen)
 ![BBRPlus](https://img.shields.io/badge/BBR-Plus-orange)
-![TCP Brutal](https://img.shields.io/badge/TCP-Brutal-red)
 ![EEVDF](https://img.shields.io/badge/scheduler-EEVDF-blueviolet)
 ![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20arm64-yellow)
 
@@ -63,7 +62,6 @@ This repository builds every package format from the same patched, fully configu
   - **BBRv3**: Google's next-generation congestion control algorithm, sourced from [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches), built in, and enabled by default
   - **BBRv1**: the original algorithm remains available as `bbr1`
   - **BBRPlus**: the dog250 and cx9208 variant, adapted from [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable)
-- Includes **TCP Brutal** for multiplexed workloads, sourced from [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal)
 - Integrates the [**AmneziaWG** kernel module](external/amneziawg/README_en.md) into the shared kernel build and packages; compatible `awg` / `awg-quick` userspace tools must be installed separately for configuration
 - Uses the upstream **EEVDF** fair scheduler without third-party scheduler patches
 - Builds for x86_64 and arm64, with daily upstream update checks
@@ -74,7 +72,7 @@ This repository builds every package format from the same patched, fully configu
 | Component | Details |
 | --- | --- |
 | Kernel base | 6.12 / 6.18 / 7.1 series with Debian kernel team patches |
-| Networking | BBRv3 built in and enabled by default; BBRPlus, BBRv1, and Brutal as modules; AmneziaWG as a kernel module; `sch_fq` as the default qdisc |
+| Networking | BBRv3 built in and enabled by default; BBRPlus and BBRv1 as modules; AmneziaWG as a kernel module; `sch_fq` as the default qdisc |
 | CPU scheduler | Upstream EEVDF fair scheduler |
 | Memory policy | THP in `madvise` mode; autogroup and automatic NUMA balancing disabled |
 | CPU capacity (x86) | `NR_CPUS=512`, with `MAXSMP` disabled for VPS-scale systems |
@@ -195,8 +193,8 @@ sysctl net.core.default_qdisc           # Should be fq
 BBRv3 is built into the kernel and enabled by default, so no extra configuration is required. The other algorithms are provided as modules and can be loaded when needed:
 
 ```bash
-sudo modprobe tcp_bbr1 tcp_bbrplus tcp_brutal
-sysctl net.ipv4.tcp_available_congestion_control  # Should then include bbr bbr1 bbrplus brutal
+sudo modprobe tcp_bbr1 tcp_bbrplus
+sysctl net.ipv4.tcp_available_congestion_control  # Should then include bbr bbr1 bbrplus
 ```
 
 ## 🔧 Custom builds

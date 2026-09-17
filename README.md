@@ -4,7 +4,7 @@
 
 # Cloud Kernel BBRv3
 
-**集成 BBRv3 / BBRPlus / Brutal，基于 Debian Cloud 内核配置，专为 VPS 健壮运行优化的定制内核**
+**集成 BBRv3 / BBRPlus，基于 Debian Cloud 内核配置，专为 VPS 健壮运行优化的定制内核**
 
 [![CI](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/build.yml)
 [![Upstream Check](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml/badge.svg)](https://github.com/CloudPassenger/Cloud-Kernel-BBRv3/actions/workflows/check-upstream.yml)
@@ -13,7 +13,6 @@
 ![Kernel Series](https://img.shields.io/badge/kernel-6.12%20%7C%206.18%20%7C%207.1-blue)
 ![BBRv3](https://img.shields.io/badge/BBR-v3-brightgreen)
 ![BBRPlus](https://img.shields.io/badge/BBR-Plus-orange)
-![TCP Brutal](https://img.shields.io/badge/TCP-Brutal-red)
 ![EEVDF](https://img.shields.io/badge/scheduler-EEVDF-blueviolet)
 ![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20arm64-yellow)
 
@@ -63,7 +62,6 @@ RPM 软件包面向主流的 DNF/RPM 生态，覆盖 Fedora、Red Hat Enterprise
   - **BBRv3**：Google 的新一代拥塞控制算法（来自 [xanmod/linux-patches](https://gitlab.com/xanmod/linux-patches)），已内置并设为默认
   - **BBRv1**：保留原版算法，将拥塞控制算法设为 `bbr1` 即可使用
   - **BBRPlus**：dog250 与 cx9208 的魔改版本（修改自 [UJX6N/bbrplus-6.x_stable](https://github.com/UJX6N/bbrplus-6.x_stable)）
-- 内置 **TCP Brutal** 拥塞控制算法，面向多路复用场景（来自 [apernet/tcp-brutal](https://github.com/apernet/tcp-brutal)）
 - 集成 [**AmneziaWG** 内核模块](external/amneziawg/README.md)，随内核统一编译和打包；运行时配置需要单独安装兼容的 `awg` / `awg-quick` 用户态工具
 - 采用上游 **EEVDF** 公平调度器，不引入第三方调度器补丁
 - 支持多架构（x86_64 与 arm64），每日自动构建并跟踪上游更新
@@ -74,7 +72,7 @@ RPM 软件包面向主流的 DNF/RPM 生态，覆盖 Fedora、Red Hat Enterprise
 | 组件 | 详细信息 |
 | --- | --- |
 | 内核基础 | 6.12 / 6.18 / 7.1 系列，并集成 Debian 团队补丁 |
-| 网络优化 | BBRv3（内置并设为默认）/ BBRPlus / BBRv1 / Brutal（模块形式），AmneziaWG 内核模块，默认使用 `sch_fq` qdisc |
+| 网络优化 | BBRv3（内置并设为默认）/ BBRPlus / BBRv1（模块形式），AmneziaWG 内核模块，默认使用 `sch_fq` qdisc |
 | CPU 调度器 | 上游 EEVDF 公平调度器 |
 | 内存策略 | THP 使用 `madvise` 模式；禁用 autogroup，关闭 NUMA 默认均衡 |
 | CPU 规模（x86） | `NR_CPUS=512`，关闭 `MAXSMP`，适配 VPS 规模 |
@@ -194,8 +192,8 @@ sysctl net.core.default_qdisc           # 应为 fq
 BBRv3 已内置且默认启用，无需额外配置。其余算法以模块形式提供，按需加载：
 
 ```bash
-sudo modprobe tcp_bbr1 tcp_bbrplus tcp_brutal
-sysctl net.ipv4.tcp_available_congestion_control  # 加载后应包含 bbr bbr1 bbrplus brutal
+sudo modprobe tcp_bbr1 tcp_bbrplus
+sysctl net.ipv4.tcp_available_congestion_control  # 加载后应包含 bbr bbr1 bbrplus
 ```
 
 ## 🔧 自定义构建说明
